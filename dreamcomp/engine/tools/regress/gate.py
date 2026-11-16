@@ -50,17 +50,19 @@ def digest(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def capture(label: str, build: str, config: str, game: str) -> int:
-    exe = REPO / build / "games" / game / f"{game}_boot"
-    if not exe.exists():
-        print(f"no launcher at {exe}", file=sys.stderr)
+def capture(label: str, build: str, config: str, game: str, exe: str | None, disc: str | None,
+            names: list[str]) -> int:
+    exe_path = pathlib.Path(exe).resolve() if exe else REPO / build / "games" / game / f"{game}_boot"
+    if not exe_path.exists():
+        print(f"no launcher at {exe_path}", file=sys.stderr)
         return 2
     out = STORE / label
     out.mkdir(parents=True, exist_ok=True)
-    for name, extra in SCENARIOS.items():
+    for name in names:
+        extra = SCENARIOS[name] + (["--disc", disc] if disc else [])
         h, rep = out / f"{name}.hash", out / f"{name}.report"
         proc = subprocess.run(
-            [str(exe), "--config", str(REPO / config), *COMMON, *extra,
+            [str(exe_path), "--config", str(REPO / config), *COMMON, *extra,
              "--write-hash", str(h), "--report", str(rep)],
             capture_output=True, text=True, timeout=3600, cwd=str(REPO))
         if not h.exists() or h.stat().st_size == 0:
@@ -75,15 +77,15 @@ def capture(label: str, build: str, config: str, game: str) -> int:
     return 0
 
 
-def compare(a: str, b: str) -> int:
+def compare(a: str, b: str, names: list[str]) -> int:
     bad = False
-    for name in SCENARIOS:
+    for name in names:
         pa, pb = STORE / a / f"{name}.hash", STORE / b / f"{name}.hash"
         # Loudly, not silently. Comparing two absent files used to report a match, which is the
         # worst possible failure mode for a gate: it says "no regression" when it checked nothing.
         missing = [p for p in (pa, pb) if not p.exists()]
         for p in missing:
-            print(f"  {name:9} MISSING {p.relative_to(REPO)} -- capture it before comparing",
+            print(f"  {name:9} MISSING {p} -- capture it before comparing",
                   file=sys.stderr)
         if missing:
             # Per scenario, not overall: one missing capture must not hide the other scenario's
@@ -107,21 +109,36 @@ def compare(a: str, b: str) -> int:
 
 
 def main() -> int:
+    global STORE
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    # Port repositories: --store <port>/.regress, --exe <launcher>, --disc <image>, and the
+    # scenarios the title can reach so far.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--store", type=pathlib.Path, help=f"capture directory (default {STORE})")
+    common.add_argument("--scenarios", default=",".join(SCENARIOS),
+                        help=f"comma-separated subset of {', '.join(SCENARIOS)}")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("capture", help="run both scenarios and store the hashes")
+    c = sub.add_parser("capture", parents=[common], help="run the scenarios and store the hashes")
     c.add_argument("label")
     c.add_argument("--build", default="build")
     c.add_argument("--config", default="games/crazytaxi/crazytaxi.toml")
     c.add_argument("--game", default="crazytaxi")
-    d = sub.add_parser("compare", help="compare two captures")
+    c.add_argument("--exe", help="launcher path (default <build>/games/<game>/<game>_boot)")
+    c.add_argument("--disc", help="disc image passed to the launcher as --disc")
+    d = sub.add_parser("compare", parents=[common], help="compare two captures")
     d.add_argument("before")
     d.add_argument("after")
     a = ap.parse_args()
+    names = [n for n in a.scenarios.split(",") if n]
+    unknown = [n for n in names if n not in SCENARIOS]
+    if unknown or not names:
+        ap.error(f"unknown scenario(s) {unknown}; known: {', '.join(SCENARIOS)}")
+    if a.store:
+        STORE = a.store.resolve()
     if a.cmd == "capture":
-        return capture(a.label, a.build, a.config, a.game)
-    return compare(a.before, a.after)
+        return capture(a.label, a.build, a.config, a.game, a.exe, a.disc, names)
+    return compare(a.before, a.after, names)
 
 
 if __name__ == "__main__":

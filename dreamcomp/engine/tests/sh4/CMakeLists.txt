@@ -6,6 +6,10 @@ set(_ct_slice ${DREAM_ROOT}/games/crazytaxi/slice.cmake)
 if(EXISTS ${_ct_slice})
   include(${_ct_slice})
 endif()
+# Slices a port repository adds the same way (each file appends to DREAM_SH4_PROGRAMS).
+foreach(_slice IN LISTS DREAM_SH4_EXTRA_SLICES)
+  include(${_slice})
+endforeach()
 
 set(_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen)
 file(MAKE_DIRECTORY ${_gen_dir})
@@ -68,6 +72,11 @@ target_compile_definitions(dream_emit_tests PRIVATE
   DREAM_SH4_PROGRAMS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/programs"
   DREAM_SH4_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
   DREAM_REPO_DIR="${DREAM_ROOT}")
+# A port's captured states for its slice, kept out of git beside its extracted disc files.
+if(DREAM_SH4_EXTRA_GOLDEN_DIR)
+  target_compile_definitions(dream_emit_tests PRIVATE
+    DREAM_SH4_EXTRA_GOLDEN_DIR="${DREAM_SH4_EXTRA_GOLDEN_DIR}")
+endif()
 target_include_directories(dream_emit_tests SYSTEM PRIVATE ${DREAM_ROOT}/third_party/doctest)
 target_link_libraries(dream_emit_tests PRIVATE dream::runtime)
 dream_target_defaults(dream_emit_tests)

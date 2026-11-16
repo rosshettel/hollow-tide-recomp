@@ -38,13 +38,16 @@ def main() -> int:
     fns = fns["functions"] if isinstance(fns, dict) else fns
     by = {int(f["entry"], 0): f for f in fns}
     out = []
-    for dm in re.finditer(r"^void fn_([0-9a-f]+)\(Ctx& c, Memory& m\) \{\n", src, re.M):
+    # Bodies live in the resume entry, which opens with a `switch (resume_pc)` every function has.
+    for dm in re.finditer(r"^static void fn_([0-9a-f]+)__resume\(Ctx& c, Memory& m, std::uint32_t resume_pc\) \{\n",
+                          src, re.M):
         entry = int(dm.group(1), 16)
         if entry in a.exclude or entry not in by:
             continue
         body = src[dm.end():src.find("\n}\n", dm.end())]
-        if ("call_indirect(" in body or re.search(r"fn_[0-9a-f]+\(c, m\)", body) or "unimplemented(" in body
-                or "trapa(" in body or "switch (" in body or "c.gbr" in body or "write_sr" in body or "c.vbr" in body):
+        if ("call_indirect(" in body or re.search(r"fn_[0-9a-f]+(__\w+)?\(c, m[,)]", body) or "unimplemented(" in body
+                or "trapa(" in body or re.search(r"switch \((?!resume_pc\))", body) or "c.gbr" in body
+                or "write_sr" in body or "c.vbr" in body):
             continue
         if re.search(r"m\.(read|write)\d+\(0x[0-9a-fA-F]+u?[,)]", body):
             continue

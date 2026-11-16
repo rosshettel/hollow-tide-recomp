@@ -10,6 +10,11 @@ if(NOT EXISTS "${DREAMCOMP_DIR}/cmake/DreamcompPort.cmake")
 endif()
 # Before add_subdirectory, so the engine's tests (-DDREAM_BUILD_TESTS=ON) run from this ctest.
 enable_testing()
+# Hydro Thunder functions in the engine's differential harness and golden replay. The captured
+# states embed results computed from the game's code, so they stay beside the extracted disc files.
+set(HT_IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/game/extracted/fs/1ST_READ.BIN)
+set(DREAM_SH4_EXTRA_SLICES ${CMAKE_CURRENT_SOURCE_DIR}/game/slice.cmake)
+set(DREAM_SH4_EXTRA_GOLDEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/game/extracted/golden)
 add_subdirectory(${DREAMCOMP_DIR} dreamcomp)
 add_subdirectory(game)
 
@@ -19,4 +24,12 @@ if(Python3_FOUND)
   add_test(NAME hydrothunder.identity
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_identity.py)
   set_tests_properties(hydrothunder.identity PROPERTIES SKIP_RETURN_CODE 77)
+  # The slice against Flycast: needs the oracle core (-DDREAM_FLYCAST_CORE) and the extracted image.
+  if(DREAM_FLYCAST_CORE AND EXISTS ${HT_IMAGE} AND TARGET dream_sh4_runner)
+    configure_file(game/oracle-cases.json ${CMAKE_CURRENT_BINARY_DIR}/hydrothunder-oracle-cases.json)
+    add_test(NAME hydrothunder.differential
+      COMMAND ${Python3_EXECUTABLE} ${DREAMCOMP_DIR}/engine/tools/oracle/differential.py
+              --runner $<TARGET_FILE:dream_sh4_runner> --lib ${DREAM_FLYCAST_CORE}
+              --cases ${CMAKE_CURRENT_BINARY_DIR}/hydrothunder-oracle-cases.json)
+  endif()
 endif()

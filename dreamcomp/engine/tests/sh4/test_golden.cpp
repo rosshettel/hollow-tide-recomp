@@ -191,10 +191,15 @@ TEST_CASE("golden replay: every captured oracle state is reproduced") {
     const std::filesystem::path dir = DREAM_SH4_GOLDEN_DIR;
     const std::filesystem::path repo = DREAM_REPO_DIR;
     int replayed = 0, skipped = 0;
-    std::vector<std::filesystem::path> files;
-    for (const auto& e : std::filesystem::directory_iterator(dir))
-        if (e.path().extension() == ".golden")
-            files.push_back(e.path());
+    std::vector<std::filesystem::path> files, dirs{dir};
+#ifdef DREAM_SH4_EXTRA_GOLDEN_DIR
+    if (std::filesystem::is_directory(DREAM_SH4_EXTRA_GOLDEN_DIR))
+        dirs.emplace_back(DREAM_SH4_EXTRA_GOLDEN_DIR);
+#endif
+    for (const auto& d : dirs)
+        for (const auto& e : std::filesystem::directory_iterator(d))
+            if (e.path().extension() == ".golden")
+                files.push_back(e.path());
     std::sort(files.begin(), files.end());
     REQUIRE(!files.empty());
     std::vector<Mode> modes{Mode::Translated};
