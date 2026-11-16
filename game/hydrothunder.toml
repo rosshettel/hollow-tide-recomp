@@ -1,0 +1,21 @@
+# Hydro Thunder (USA), T-9702N V1.020 -- dreamcomp game config.
+# Format: dreamcomp/engine/docs/game-config.md. Measured on the owner's disc; never commit disc data.
+# No disc path here: the image is passed at run time (`dc.py setup --disc`, launcher `--disc`).
+
+[game]
+id = "hydrothunder"
+title = "Hydro Thunder"
+region = "USA"
+product = "T-9702N"
+
+[disc]
+sha1_1st_read = "d8d54a28eac55cb4b63d9693951f9582a1b2505a"   # the boot file this config was measured against
+
+[binary]
+path = "extracted/fs/1ST_READ.BIN"   # written by dreamcomp/tools/dc.py setup, git-ignored
+load_address = 0x8C010000
+link_address = 0x0C010000
+entry = 0x8C010000
+
+# [[relocations]] and [functions] extra: paste from --suggest-config, with a comment saying how
+# each was found. [hooks]: see dreamcomp/docs/HOOKS.md.

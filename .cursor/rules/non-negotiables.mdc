@@ -1,0 +1,49 @@
+---
+description: Project non-negotiables for the Hydro Thunder static recompilation
+alwaysApply: true
+---
+
+# Non-negotiables
+
+## 1. No copyrighted inputs in git or in shipped builds
+- Never commit game data, BIOS/firmware, disc images (`.chd`, `.gdi`, `.cdi`, `.iso`), ROM dumps, or binaries/assets extracted from them.
+- For development, the game image may live in the working tree, but it must stay gitignored. Before staging, check that it hasn't slipped in (`git status`, `git check-ignore`).
+- Built apps never bundle, embed, or link game data. The app asks the user for the path at runtime (file picker, `--game`, or saved setting). Never hardcode a path, including the dev copy's location.
+- Dev tooling and tests may default to the local gitignored copy. If it's missing, tests skip cleanly.
+- Generated code that embeds game bytes (data tables, constant pools) counts as extracted data. It is produced into an ignored build dir, never committed.
+
+## 2. Targets and host layer
+- macOS ARM64, Android ARM64, Windows x86-64, Linux x86-64. Every change must build on all four.
+- SDL3 is the only host layer: window, input, audio, timing, threads, filesystem. No direct platform APIs outside a thin, clearly named platform shim.
+- No x86-only or ARM-only intrinsics without a portable fallback. Don't assume endianness, `long` size, or alignment; use fixed-width types.
+
+## 3. Generated code and runtime stay separate
+- The recompiler output (translated SH-4 code) and the hand-written runtime (memory map, hardware emulation, SDL glue) live in separate directories and separate build targets.
+- The runtime never includes generated headers. Generated code talks to the runtime only through a narrow, versioned interface header.
+- Never hand-edit generated files. Fix the generator and regenerate.
+
+## 4. Every translation feature is tested against a reference
+- Each new or changed translation feature (instruction, addressing mode, delay slot, FPU mode, MMU/store queue behavior, etc.) ships with a test that compares its result to Flycast or the tbg SH-4 simulator (`refs/sh4objtest`).
+- Compare architectural state: registers, FPSCR/SR, memory touched, and PC/branch outcome.
+- If there's no test, the feature isn't done. Say so explicitly instead of merging it.
+
+## 5. Code from `refs/` is flagged with its license
+- This project builds on `dreamcomp`, so it is **GPL-2.0**. What each ref is for: `docs/refs.md`.
+- Reading `refs/` to learn behavior is fine. **Copying or closely adapting code is not, until you flag it.** Before writing borrowed code, tell the user the source file and its license. If the table says "don't copy", or the license is unknown, wait for approval.
+- Borrowed code gets a header comment naming the source project, file, and license (SPDX identifier), e.g.
+  `// Adapted from refs/flycast/core/hw/sh4/sh4_opcodes.cpp — GPL-2.0-or-later`
+- Check per-file headers too, since a repo can mix licenses.
+
+| `refs/` | License | Copying means |
+|---|---|---|
+| `dreamcomp` | GPL-2.0 (vendors dream-recomp and Flycast portions) | The base. OK, keep its notices |
+| `flycast` | GPL-2.0-or-later | OK with attribution |
+| `N64Recomp` | MIT | OK with attribution |
+| `chuchu` | MIT | OK with attribution |
+| `dcrecomp` | GPL-2.0 (HAL derived from Flycast) | OK with attribution |
+| `sh4objtest` | MIT | OK with attribution |
+| `KallistiOS` | BSD-style (KOS License); bundled third-party code varies | OK with attribution, check file headers |
+| `SDL` | Zlib | OK |
+| `sfa3-recomp` | GPL-3.0 | Don't copy. GPL-3.0 code can't go into a GPL-2.0 project |
+| `tbg-decomp` | No repo license (all rights reserved); some files GPL-2.0 | Don't copy. Test style reference only |
+- `refs/` is gitignored, read-only reference material and is never built into the project. Because it isn't published, anything borrowed from it has to be copied into the source tree with its attribution.

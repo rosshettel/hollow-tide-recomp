@@ -1,0 +1,56 @@
+# ============================================================
+#  NO GAME DATA IN THIS REPOSITORY. EVER.
+#  Hydro Thunder is (c) Midway. This repository ships configuration
+#  and original code only; every player supplies their own disc image.
+#  `python dreamcomp/tools/audit.py assets --repo .` enforces it.
+#  Patterns are listed in both cases so they also hold on a
+#  case-sensitive filesystem (1ST_READ.BIN, IP.BIN, AUDIO64.DRV).
+# ============================================================
+*.chd
+*.CHD
+*.gdi
+*.GDI
+*.cdi
+*.CDI
+*.cue
+*.CUE
+*.iso
+*.ISO
+*.bin
+*.BIN
+*.raw
+*.RAW
+*.drv
+*.DRV
+*.kat
+*.KAT
+*.PVR
+*.DAT
+*.vmu
+*.vms
+*.vmi
+*.zip
+*.7z
+bios/
+dc_boot*
+dc_flash*
+naomi*.bin
+
+# Extracted from the owner's disc by dreamcomp/tools/dc.py setup
+game/extracted/
+game/suggested.toml
+
+# Build output and machine-local state
+build*/
+.dreamcomp/
+.deps/
+shots/
+traces/
+.regress/
+*.ppm
+*.log
+__pycache__/
+.venv/
+
+# Third-party reference code: local only
+/refs/
