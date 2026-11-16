@@ -126,6 +126,8 @@ def main() -> int:
     c.add_argument("--game", default="crazytaxi")
     c.add_argument("--exe", help="launcher path (default <build>/games/<game>/<game>_boot)")
     c.add_argument("--disc", help="disc image passed to the launcher as --disc")
+    c.add_argument("--gameplay-press", help="the port's own --press script for `gameplay`")
+    c.add_argument("--max-seconds", help="guest seconds per scenario (default 40)")
     d = sub.add_parser("compare", parents=[common], help="compare two captures")
     d.add_argument("before")
     d.add_argument("after")
@@ -137,6 +139,10 @@ def main() -> int:
     if a.store:
         STORE = a.store.resolve()
     if a.cmd == "capture":
+        if a.gameplay_press:
+            SCENARIOS["gameplay"] = ["--press", a.gameplay_press]
+        if a.max_seconds:
+            COMMON[COMMON.index("--max-seconds") + 1] = a.max_seconds
         return capture(a.label, a.build, a.config, a.game, a.exe, a.disc, names)
     return compare(a.before, a.after, names)
 

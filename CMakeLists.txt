@@ -18,6 +18,11 @@ set(DREAM_SH4_EXTRA_GOLDEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/game/extracted/golden
 add_subdirectory(${DREAMCOMP_DIR} dreamcomp)
 add_subdirectory(game)
 
+add_executable(hydrothunder_keyboard_test tests/test_keyboard.cpp)
+target_link_libraries(hydrothunder_keyboard_test PRIVATE dream_render)
+target_compile_options(hydrothunder_keyboard_test PRIVATE -UNDEBUG)
+add_test(NAME hydrothunder.keyboard COMMAND hydrothunder_keyboard_test)
+
 # Disc identity test (docs/findings/phase-00.md). Skips when no image is found.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)

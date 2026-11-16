@@ -60,6 +60,11 @@ struct PortInfo {
     };
     HudRule hud;
 
+    // The game's own control layout, in the bindings file format (dream/render/input.h): only the
+    // controls it changes; the rest keep the engine defaults. Written once to the port's settings
+    // folder as bindings.txt, which the launcher then uses instead of the shared file.
+    const char* default_bindings = nullptr;
+
     // Anything else the port wants each vblank (cheats, debug overlays...).
     void (*on_vblank)(dream::System& sys, Settings& settings) = nullptr;
     // Once, before the first guest instruction.

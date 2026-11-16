@@ -57,4 +57,5 @@ extra = [0x0C021020,   # called 227 times
          0x0C0944BC,   # 1,816
          0x0C094D14,   # 2
          0x0C0951A8,   # 2
-         0x0C1C1024]   # 1, from 0x0C1B620E
+         0x0C1C1024,   # 1, from 0x0C1B620E
+         0x0C01BBA0]   # M5 Thunder Park race: jsr @r12 at 0x0C061A4C through a pointer table (as 0x8C01BBA0)

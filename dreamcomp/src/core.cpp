@@ -120,6 +120,21 @@ void add_input_and_mod_flags(std::vector<std::string>& args,
     }
     if (!has_flag(args, "--soft-clip") && g_settings.get("clip", "hard") == "soft")
         args.push_back("--soft-clip");
+    // A port with its own control layout keeps its bindings beside its settings, seeded once from
+    // the port's defaults; later edits in the Controls screen are the player's and are kept.
+    if (g_port && g_port->default_bindings && !has_flag(args, "--bindings")) {
+        const std::filesystem::path path = config_dir / "bindings.txt";
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) {
+            std::filesystem::create_directories(config_dir, ec);
+            if (std::FILE* f = std::fopen(path.string().c_str(), "wb")) {
+                std::fputs(g_port->default_bindings, f);
+                std::fclose(f);
+            }
+        }
+        args.push_back("--bindings");
+        args.push_back(path.string());
+    }
     if (has_flag(args, "--mod"))
         return;
     const std::string mods = g_settings.get("mods");

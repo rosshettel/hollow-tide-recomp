@@ -1598,8 +1598,9 @@ void usage(const char* argv0, std::FILE* out) {
         "\n"
         "Reproducing a run:\n"
         "  --rtc-seed N           fix the console clock so two runs do the same thing\n"
-        "  --press B@F[,B@F...]   hold a button for 8 frames from frame F (a b c x y z start\n"
-        "                         up down left right), to get past screens that wait for input\n"
+        "  --press B@F[:N][,...]  hold a control for 8 (or N) frames from frame F (a b c x y z start\n"
+        "                         up down left right; lt rt full triggers; sl sr su sd full stick),\n"
+        "                         to get past screens that wait for input or drive a scenario\n"
         "\n"
         "Reporting what happened:\n"
         "  --report FILE          write the end-of-run report to a file as well as stdout\n"
@@ -1752,7 +1753,7 @@ int main(int argc, char** argv) {
     unsigned dump_ta_count = 1;  // --dump-ta-count K (dreamcomp): K consecutive renders from there
     // --press BUTTON@FRAME[,BUTTON@FRAME...]: hold a controller button for 8 frames from that
     // frame, so a headless run can get past "press start" screens. Names: a b c x y z start up
-    // down left right.
+    // down left right, lt rt (triggers), sl sr su sd (stick); BUTTON@FRAME:N holds N frames.
     std::string presses;
     // --window: open a window and play. Without it the run is headless exactly as before.
     // --scale N draws the geometry at N times the guest's resolution; the frame is resampled back
@@ -2264,8 +2265,15 @@ int main(int argc, char** argv) {
         }
     };
     sys.memory.map_mmio(dream::maple::Bus::kBase, dream::maple::Bus::kEnd, &maple);
-    // Scripted controller presses (--press start@120,a@300): each is held for 8 frames.
-    std::vector<std::pair<std::uint64_t, std::uint16_t>> scripted;
+    // Scripted controller presses (--press start@120,a@300,rt@400:3000): each is held for 8 frames
+    // or :N. lt/rt are full triggers, sl/sr/su/sd the stick at full deflection.
+    struct Scripted {
+        std::uint64_t frame, frames;
+        std::uint16_t bit;  // 0: the analog control in `analog`
+        char analog[3];
+    };
+    std::vector<Scripted> scripted;
+    bool scripted_active = false;
     {
         static const struct {
             const char* name;
@@ -2285,21 +2293,46 @@ int main(int argc, char** argv) {
             if (at == std::string::npos)
                 continue;
             const std::string name = one.substr(0, at);
-            const std::uint64_t frame = std::strtoull(one.c_str() + at + 1, nullptr, 0);
+            char* end = nullptr;
+            const std::uint64_t frame = std::strtoull(one.c_str() + at + 1, &end, 0);
+            const std::uint64_t frames = *end == ':' ? std::strtoull(end + 1, nullptr, 0) : 8;
+            bool known = false;
             for (const auto& n : kNames)
-                if (name == n.name)
-                    scripted.push_back({frame, n.bit});
+                if (name == n.name) {
+                    scripted.push_back({frame, frames, n.bit, {}});
+                    known = true;
+                }
+            for (const char* a : {"lt", "rt", "sl", "sr", "su", "sd"})
+                if (name == a) {
+                    scripted.push_back({frame, frames, 0, {a[0], a[1], 0}});
+                    known = true;
+                }
+            if (!known)
+                std::fprintf(stderr, "--press: unknown control '%s'\n", name.c_str());
         }
     }
     sys.spg.on_vblank_out = [&] {
         for (auto* e : dream::host::extensions()) e->on_vblank(sys);
         if (!scripted.empty()) {
             const std::uint64_t f = sys.spg.frames();
+            dream::maple::ControllerState s;
             std::uint16_t held = 0;
-            for (const auto& [start, bit] : scripted)
-                if (f >= start && f < start + 8)
-                    held |= bit;
-            pad_ptr->state.buttons = static_cast<std::uint16_t>(0xFFFFu & ~held);
+            scripted_active = false;
+            for (const auto& p : scripted) {
+                if (f < p.frame || f >= p.frame + p.frames)
+                    continue;
+                scripted_active = true;
+                held |= p.bit;
+                const std::string a = p.analog;
+                if (a == "lt") s.ltrigger = 0xFF;
+                if (a == "rt") s.rtrigger = 0xFF;
+                if (a == "sl") s.joy_x = 0x00;
+                if (a == "sr") s.joy_x = 0xFF;
+                if (a == "su") s.joy_y = 0x00;
+                if (a == "sd") s.joy_y = 0xFF;
+            }
+            s.buttons = static_cast<std::uint16_t>(0xFFFFu & ~held);
+            pad_ptr->state = s;
         }
         maple.vblank();
     };
@@ -2514,7 +2547,7 @@ int main(int argc, char** argv) {
                     throw StopRun{"the window was closed"};
                 // Scripted presses win while they are held, so --press still works with a window
                 // open.
-                if (scripted.empty() || pad_ptr->state.buttons == 0xFFFFu)
+                if (!scripted_active)
                     live->read_controls(pad_ptr->state, 0);
                 sync_ports(live->window.players());
                 for (unsigned port = 1; port < port_pads.size(); ++port)
