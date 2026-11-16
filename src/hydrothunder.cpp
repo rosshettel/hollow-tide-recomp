@@ -3,6 +3,7 @@
 #include "dreamcomp/hook.h"
 #include "dreamcomp/port.h"
 #include "keyboard.h"
+#include "unlocks.h"
 
 namespace {
 
@@ -32,6 +33,7 @@ const dreamcomp::PortInfo kInfo = [] {
     p.default_bindings = hydrothunder::kKeyboard;
     p.widescreen = &widescreen;
     p.widescreen_now = &widescreen_now;
+    p.on_vblank = &hydrothunder::on_vblank_unlocks;
     // Menus and the race HUD are flat polygons (2 sprites in a race frame) at shared depths
     // (race 1.0, 1.11, 1.52-1.56, 10; menus 6e-05-1.25); 3D reaches 1/w 4.7 but never flat and
     // shared, so the default overlay_z stays out of the way.

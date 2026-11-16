@@ -29,6 +29,9 @@ if(Python3_FOUND)
   add_test(NAME hydrothunder.identity
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_identity.py)
   set_tests_properties(hydrothunder.identity PROPERTIES SKIP_RETURN_CODE 77)
+  add_test(NAME hydrothunder.unlocks
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unlocks.py)
+  set_tests_properties(hydrothunder.unlocks PROPERTIES SKIP_RETURN_CODE 77)
   # The slice against Flycast: needs the oracle core (-DDREAM_FLYCAST_CORE) and the extracted image.
   if(DREAM_FLYCAST_CORE AND EXISTS ${HT_IMAGE} AND TARGET dream_sh4_runner)
     configure_file(game/oracle-cases.json ${CMAKE_CURRENT_BINARY_DIR}/hydrothunder-oracle-cases.json)
