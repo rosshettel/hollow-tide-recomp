@@ -59,3 +59,7 @@ extra = [0x0C021020,   # called 227 times
          0x0C0951A8,   # 2
          0x0C1C1024,   # 1, from 0x0C1B620E
          0x0C01BBA0]   # M5 Thunder Park race: jsr @r12 at 0x0C061A4C through a pointer table (as 0x8C01BBA0)
+
+[hooks]
+# Copies the camera's view matrix into the matrix stack base (0x8C299CFC) and resets the stack.
+0x8C093E48 = "set_camera@exit"

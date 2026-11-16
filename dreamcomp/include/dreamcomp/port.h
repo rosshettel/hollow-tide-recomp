@@ -37,6 +37,9 @@ struct PortInfo {
     void (*widescreen)(dream::System& sys, float aspect) = nullptr;
     bool widescreen_anamorphic = true;
     float max_aspect = 32.0f / 9.0f;
+    // Optional, polled every vblank: false shows the original 4:3 picture for now (e.g. menus
+    // whose 2D art the HUD correction cannot keep together), true allows the widened view.
+    bool (*widescreen_now)(dream::System& sys) = nullptr;
 
     // Widescreen HUD correction (anamorphic ports). The game draws its 2D HUD in 640x480 screen
     // space, so the horizontal stretch that widens the 3D view also widens the HUD. Primitives

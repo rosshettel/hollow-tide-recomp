@@ -509,24 +509,30 @@ public:
     // Expanded: the view follows the window's shape. A new shape is taken once the window has
     // kept it for a quarter of a second, so dragging an edge does not rebuild the render target
     // every frame. Original: back to 4:3.
-    void follow_window() {
+    void follow_window(dream::System& sys) {
         if (!g_port || !g_port->widescreen)
             return;
         auto& hc = dream::host::host_controls();
-        const float want = expanded_aspect()
+        const bool held = g_port->widescreen_now && !g_port->widescreen_now(sys);
+        const float want = expanded_aspect() && !held
                                ? expanded_target(hc.window_aspect ? hc.window_aspect() : 0.0f)
                                : 4.0f / 3.0f;
+        // The port's switch (a race starting or ending) takes effect at once; window drags settle.
+        const bool port_switch = held != held_;
+        held_ = held;
         if (std::fabs(want - g_aspect_now) < 0.005f) {
             settle_ = 0;
             return;
         }
-        if (std::fabs(want - settle_aspect_) > 0.002f) {
-            settle_aspect_ = want;
-            settle_ = 0;
-            return;
+        if (!port_switch) {
+            if (std::fabs(want - settle_aspect_) > 0.002f) {
+                settle_aspect_ = want;
+                settle_ = 0;
+                return;
+            }
+            if (++settle_ < 15)
+                return;
         }
-        if (++settle_ < 15)
-            return;
         settle_ = 0;
         g_aspect_now = want;
         if (g_port->widescreen_anamorphic && hc.set_render_aspect)
@@ -539,7 +545,7 @@ public:
             overlay_->on_vblank(vblanks_);
 #endif
         ++vblanks_;
-        follow_window();
+        follow_window(sys);
         if (g_port && g_port->widescreen)
             g_port->widescreen(sys, widescreen() ? target_aspect() : 4.0f / 3.0f);
         if (g_port && g_port->on_vblank)
@@ -843,6 +849,7 @@ private:
     bool hud_fix_ = true, hud_edges_ = true;
     float settle_aspect_ = 0.0f;
     unsigned settle_ = 0;
+    bool held_ = false;  // PortInfo::widescreen_now said 4:3 at the last vblank
     std::uint64_t hud_corrected_ = 0;
     std::uint64_t sharpened_ = 0;
     bool sharp_2d_ = true;
