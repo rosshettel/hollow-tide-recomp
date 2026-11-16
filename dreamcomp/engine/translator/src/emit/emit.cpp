@@ -317,6 +317,15 @@ public:
         return out.str();
     }
 
+    // One past the last instruction run() emitted. A fragment can stop well short of the extent
+    // discovery gave it (a computed jump it could not recover); the runtime's containing-function
+    // lookup must then fall through to a host that has labels for the rest.
+    std::uint32_t emitted_end() const {
+        std::uint32_t e = spec_.entry;
+        for (const auto& [start, stop] : block_end_) e = std::max(e, stop);
+        return e;
+    }
+
     // The plain entry every call goes through (after run(), which it does not repeat).
     std::string wrapper() {
         const std::string name = spec_.name.empty() ? default_name(spec_.entry) : spec_.name;
@@ -1861,11 +1870,13 @@ EmitResult emit_unit(const Image& image, const std::vector<FunctionSpec>& functi
                     (f.fpscr_entry & ~(1u << 20)) | (static_cast<std::uint32_t>(e.sz) << 20);
         }
     }
+    std::vector<std::uint32_t> table_ends;
     for (const auto& f : specs) {
         const std::size_t before = result.fp_runtime_branches;
         FunctionEmitter fe(image, f, options, known, summaries, result);
         fe.set_written(&written);
         const std::string body = fe.run();
+        table_ends.push_back(fe.emitted_end());
         // Entry-mode clone: only where the entry mode was unknown and that cost runtime tests.
         if (options.fp_entry_clones && result.fp_runtime_branches > before &&
             (f.entry_pr_unknown || f.entry_sz_unknown)) {
@@ -1897,13 +1908,14 @@ EmitResult emit_unit(const Image& image, const std::vector<FunctionSpec>& functi
         }
     }
     src << "const FunctionEntry kTable[] = {\n";
-    for (const auto& f : specs) {
+    for (std::size_t k = 0; k < specs.size(); ++k) {
+        const auto& f = specs[k];
         src << "    {" << hexu(f.entry) << ", &" << f.name;
         if (options.overlay)
             src << ", kSig_" << f.name << ", sizeof kSig_" << f.name << " / sizeof(std::uint16_t)";
         else
             src << ", nullptr, 0";
-        src << ", " << hexu(f.end) << ", &" << f.name << "__resume},\n";
+        src << ", " << hexu(table_ends[k]) << ", &" << f.name << "__resume},\n";
     }
     src << "};\nstruct Registrar {\n    Registrar() { register_functions(kTable, sizeof kTable / "
            "sizeof kTable[0]); }\n} registrar;\n"

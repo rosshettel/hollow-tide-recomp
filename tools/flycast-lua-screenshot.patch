@@ -1,0 +1,68 @@
+SPDX-License-Identifier: GPL-2.0-only
+Patch against Flycast (https://github.com/flyinghead/flycast, refs/flycast 3a5267a, GPL-2.0,
+Copyright flyinghead): CMakeLists.txt, core/lua/lua.cpp, core/ui/gui.cpp, core/ui/gui.h.
+Enables Lua on macOS and adds flycast.emulator.screenshot(path) for tools/flycast_shots.py.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fee2357..6debeb5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -573,7 +573,7 @@ if(NOT LIBRETRO)
+ 
+ 	if(USE_LUA)
+ 		find_package(Lua 5.2)
+-		if(NOT APPLE AND LUA_FOUND)
++		if(LUA_FOUND)
+ 			target_compile_definitions(${PROJECT_NAME} PRIVATE USE_LUA)
+ 			target_include_directories(${PROJECT_NAME} PRIVATE ${LUA_INCLUDE_DIR} core/deps/luabridge/Source)
+ 			list(TRANSFORM LUA_LIBRARIES REPLACE "\.dll" "")
+diff --git a/core/lua/lua.cpp b/core/lua/lua.cpp
+index 5594584..021872d 100644
+--- a/core/lua/lua.cpp
++++ b/core/lua/lua.cpp
+@@ -477,6 +477,7 @@ static void luaRegister(lua_State *L)
+ 						gui_open_settings();
+ 				}))
+ 				.addFunction("exit", dc_exit)
++				.addFunction("screenshot", gui_saveScreenshot)
+ 				.addFunction("displayNotification", os_notify)
+ 			.endNamespace()
+ 
+diff --git a/core/ui/gui.cpp b/core/ui/gui.cpp
+index 614739a..c678115 100644
+--- a/core/ui/gui.cpp
++++ b/core/ui/gui.cpp
+@@ -1696,6 +1696,21 @@ void gui_takeScreenshot()
+ 	});
+ }
+ 
++void gui_saveScreenshot(const std::string& path)
++{
++	gui_runOnUiThread([path]() {
++		std::vector<u8> data;
++		getScreenshot(data, 640);
++		FILE *f = data.empty() ? nullptr : nowide::fopen(path.c_str(), "wb");
++		if (f == nullptr) {
++			WARN_LOG(COMMON, "screenshot %s not written", path.c_str());
++			return;
++		}
++		std::fwrite(&data[0], data.size(), 1, f);
++		std::fclose(f);
++	});
++}
++
+ #ifdef TARGET_UWP
+ // Ugly but a good workaround for MS stupidity
+ // UWP doesn't allow the UI thread to wait on a thread/task. When an std::future is ready, it is possible
+diff --git a/core/ui/gui.h b/core/ui/gui.h
+index e5b897f..1a648de 100644
+--- a/core/ui/gui.h
++++ b/core/ui/gui.h
+@@ -54,6 +54,7 @@ void gui_cycleSaveStateSlot(int step);
+ void gui_togglePause();
+ std::string gui_getCurGameBoxartUrl();
+ void gui_takeScreenshot();
++void gui_saveScreenshot(const std::string& path);
+ void gui_runOnUiThread(std::function<void()> function);
+ 
+ enum class GuiState {

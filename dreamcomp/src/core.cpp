@@ -312,7 +312,7 @@ public:
         if (g_settings.get_bool("fullscreen", false) && !has_flag(args, "--fullscreen"))
             args.push_back("--fullscreen");
         // Frame rate (docs/INTERPOLATION.md): auto blends a frame between game frames on displays
-        // above 60 Hz; 120 forces it; 60 is the game's own rate only.
+        // of 120 Hz or more; 120 forces it; 60 is the game's own rate only.
         if (!has_flag(args, "--interpolate") && !has_flag(args, "--interpolate-auto")) {
             const std::string fps = g_settings.get("fps", "auto");
             if (fps == "auto")

@@ -43,6 +43,23 @@ TEST_CASE("emit: valid unlowered instructions are unsupported, invalid words are
     CHECK(r.unsupported == 1);
 }
 
+// The table row's end is what the body emitted, not the wider extent discovery claimed, so a
+// resume or interior jump past it looks for a host function that has the label (Hydro Thunder
+// 0x0c1cc46c: a fragment ending at an unrecovered braf hid its host's switch cases).
+TEST_CASE("emit: the function table ends at the last emitted instruction") {
+    Image image;
+    image.base = 0x8C010000u;
+    // rts ; nop ; mov #1,r0 ; rts ; nop  -- the second half is never reached from the entry
+    image.bytes = {0x0B, 0x00, 0x09, 0x00, 0x01, 0xE0, 0x0B, 0x00, 0x09, 0x00};
+    FunctionSpec f;
+    f.entry = 0x8C010000u;
+    f.end = 0x8C01000Au;
+    f.name = "fn_frag";
+    const auto r = emit_unit(image, {f}, EmitOptions{});
+    CHECK(r.source.find("{0x8c010000u, &fn_frag, nullptr, 0, 0x8c010004u, &fn_frag__resume}") !=
+          std::string::npos);
+}
+
 // Generated code reaches the runtime through one versioned header and nothing else.
 TEST_CASE("emit: units include only gen_interface.h and check its version") {
     Image image;

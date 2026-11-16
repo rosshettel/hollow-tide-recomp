@@ -382,9 +382,11 @@ struct Live {
         }
         if (interpolate && interpolate_only_above_60) {
             const float hz = window.refresh_rate();
-            interpolate = hz > 61.0f;
+            // Two vsynced presents per 59.94 Hz guest frame: below ~120 Hz the second one blocks
+            // and slows the game (75 Hz panel: 26.7 ms frames, 0.8x real time).
+            interpolate = hz >= 119.0f;
             std::printf("interpolation: display %.0f Hz, %s\n", static_cast<double>(hz),
-                        interpolate ? "on" : "off (60 Hz or unknown)");
+                        interpolate ? "on" : "off (below 120 Hz or unknown)");
         }
         // Geometry interpolation (dreamcomp): a second target for the frame between two renders.
         if (interpolate && !interp_off.create(window.context(), w, h)) {
@@ -1551,7 +1553,7 @@ void usage(const char* argv0, std::FILE* out) {
         "  --fullscreen           start fullscreen (Alt+Enter toggles)\n"
         "  --interpolate          draw a blended frame between two game frames (needs a display\n"
         "                         above 60 Hz to be seen; docs/INTERPOLATION.md in dreamcomp)\n"
-        "  --interpolate-auto     the same, only when the window's display is above 60 Hz\n"
+        "  --interpolate-auto     the same, only when the window's display is 120 Hz or more\n"
         "  --sync-display         pace at the display's rate when it is within 0.5%% of the\n"
         "                         game's (60 Hz for a 59.94 Hz game: +0.1%% speed, no repeats)\n"
         "  --fps                  start with the on-screen frame-rate counter showing\n"
@@ -1735,7 +1737,7 @@ int main(int argc, char** argv) {
     bool soft_clip = false;    // --soft-clip (dreamcomp): round loud peaks off instead of clipping
     bool fullscreen = false;              // --fullscreen (dreamcomp); Alt+Enter toggles
     bool interpolate_frames = false;      // --interpolate (dreamcomp): a blended frame between renders
-    bool interpolate_auto = false;        // --interpolate-auto: only on displays above 60 Hz
+    bool interpolate_auto = false;        // --interpolate-auto: only on displays of 120 Hz or more
     bool sync_display = false;            // --sync-display (dreamcomp): pace at the display's rate
     std::string vmu;                  // --vmu FILE: a 128 KB memory-card image in the standard
                                       // layout, as any Dreamcast tool or emulator writes. Writes

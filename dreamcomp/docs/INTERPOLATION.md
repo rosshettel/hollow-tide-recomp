@@ -28,7 +28,7 @@ keeps running at its own 60 Hz (series rule: never change the logic rate).
 | G1 Correspondence | `dreamcomp_ta_match` on consecutive fight frames: ≥ 95 % of vertices paired, displacement distribution plausible | **passed** 2026-10-05: 7 consecutive Soulcalibur fight pairs, 97.8-100 % of vertices paired, median 2-3 px / p90 5-13 px per frame; outliers are off-screen or behind-camera vertices (clipped by the game) and a few mispairs, so strips moving implausibly far are not blended |
 | G2 Visual | in-between frames look like a frame of the game (no torn strips) on contact sheets of fights, menus, cuts | **passed for fights** 2026-10-05 (`DREAM_SHOT_INTERP=1` sequences: real, blended, real); menus/cuts not inspected frame by frame (23 cuts detected and skipped in 2700 frames). 2026-10-06: Daniel watched the `tools/slowmo.py` clips (pre-round camera sweep, fight action): the 120 fps side "much smoother", no glitches noticed |
 | G3 Cost | per-frame matching + second render within budget on Iris Xe (`DREAM_PROFILE=1`) | **passed**: 0.03-0.10 ms per blend; unthrottled 3.9x real time with interpolation vs 4.1x without (scale 1) |
-| G4 Pacing | 120 Hz output smooth (frame times even), audio unaffected | **partly measured** 2026-10-06: with `--present-mode immediate` the 60 Hz laptop panel no longer blocks the second present, and a fight runs at 1.0x real time with 1186 blended + 1192 real presents (~120/s), 0 audio underruns. Seeing the smoothness still needs a >60 Hz display. With vsync on a 60 Hz panel the second present blocks and the game runs at 0.5x, hence `fps = auto` (on only above 60 Hz). Before the pacing fix in `engine-changes.md` (2026-10-06) runs without vsync were not throttled at all |
+| G4 Pacing | 120 Hz output smooth (frame times even), audio unaffected | **partly measured** 2026-10-06: with `--present-mode immediate` the 60 Hz laptop panel no longer blocks the second present, and a fight runs at 1.0x real time with 1186 blended + 1192 real presents (~120/s), 0 audio underruns. Seeing the smoothness still needs a >60 Hz display. With vsync on a 60 Hz panel the second present blocks and the game runs at 0.5x, hence `fps = auto` (on only at 120 Hz or more; above 60 Hz until 2026-11-16, when a 75 Hz panel ran at 0.8x). Before the pacing fix in `engine-changes.md` (2026-10-06) runs without vsync were not throttled at all |
 
 ## Tools
 
@@ -40,7 +40,7 @@ keeps running at its own 60 Hz (series rule: never change the logic rate).
 
 ## Using it
 
-Setting `fps`: `auto` (default: blend only when the window's display refreshes above 60 Hz),
+Setting `fps`: `auto` (default: blend only when the window's display refreshes at 120 Hz or more; a 75 Hz panel ran Hydro Thunder at 0.8x with it on),
 `120` (always; on a 60 Hz panel this halves the game's speed), `60` (off). Engine flags:
 `--interpolate`, `--interpolate-auto`. The end-of-run report prints an `interpolation:` line
 (blended frames, cuts, paired vertices, strips not blended, cost). `DREAM_SHOT_INTERP=1` makes
