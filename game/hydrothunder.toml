@@ -19,3 +19,42 @@ entry = 0x8C010000
 
 # [[relocations]] and [functions] extra: paste from --suggest-config, with a comment saying how
 # each was found. [hooks]: see dreamcomp/docs/HOOKS.md.
+
+# Exception and interrupt entries, VBR = 0x8C000000 (M1 first run: 5,973 calls to 0x8C000600, one
+# per delivered interrupt). Two 0x34-byte stubs: five nops, then save r0 into the stub's own literal
+# pool (mova), read EXPEVT (0xFF000024) or INTEVT (0xFF000028) into 0x8C1CBE80, and jmp to the common
+# handler 0x8C1CBBAC (already discovered). The pool write is why no_fold. --suggest-config offered
+# 0x38 bytes; the extra 4 are the next stub's leading nops. It also offered RAM 0x8C00007C from image
+# 0x0C1D4880: that is data (zeros, then 0xFFFF fill), not taken.
+[[relocations]]
+source = 0x0C1CBB44   # general exception, VBR+0x100 (EXPEVT)
+size = 0x34
+dest = 0x8C000100
+entries = [0x8C000100]
+no_fold = true
+
+[[relocations]]
+source = 0x0C1CBB44   # TLB miss, VBR+0x400: the same stub
+size = 0x34
+dest = 0x8C000400
+entries = [0x8C000400]
+no_fold = true
+
+[[relocations]]
+source = 0x0C1CBB78   # interrupt, VBR+0x600 (INTEVT)
+size = 0x34
+dest = 0x8C000600
+entries = [0x8C000600]
+no_fold = true
+
+[functions]
+pointers = true
+sweep = true
+# Reached only through registers (M1 first run, untranslated call targets). Each lies in a
+# discovery gap right after the previous function's rts, delay slot and literal pool, and opens with
+# the mov.l r14,@-r15 prologue: real entries, not jumps into a function, so seeding truncates nothing.
+extra = [0x0C021020,   # called 227 times
+         0x0C0944BC,   # 1,816
+         0x0C094D14,   # 2
+         0x0C0951A8,   # 2
+         0x0C1C1024]   # 1, from 0x0C1B620E
