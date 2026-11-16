@@ -26,9 +26,15 @@ the Resolution setting).
   default `edges` layout the gauges sit at the screen edges.
 - Menus: composed of many flat pieces; `edges` split HARD in two and left buttons stretched,
   `center` detached the track names from their buttons. They stay 4:3 via
-  `PortInfo::widescreen_now`: 0x8C1DD1B4 == 3 from the race's first frame (guest 2530) to its end
-  (9996), 0 in menus, 1 while loading, never set by attract demos. 0x8C1DD124 looked like a state
-  in sparse dumps but flips every ~15 frames mid-race (the first try flickered).
+  `PortInfo::widescreen_now`: scene word 0x8C25C81C == 5 (2 title, 3 menus, 4 loading, 5 from the
+  first frame after loading: intro, countdown, race, end sequence) and attract flag 0x8C1DD0B8 == 0
+  (1 on the title and in demos; set the moment a game over returns to the title, where the scene
+  is still 5 for 36 frames). Earlier triggers, each found wanting in play: 0x8C1DD124 flips every
+  ~15 frames mid-race (flicker); the race clock's state 0x8C1DD1B4 == 3 misses the countdown and
+  the end sequence; the mode word 0x8C1DD1C4 (5/6) lags the intro by ~50 frames and stays 4 into
+  the intro of a second race.
+- Two-race 12:5 run: render target 4:3 (menus), wide (race 1), 4:3 (title after game over), wide
+  (race 2). Confirmed by you in play, intro through results.
 
 ## Checks
 

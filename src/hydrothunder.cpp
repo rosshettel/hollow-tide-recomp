@@ -21,10 +21,15 @@ void widescreen(dream::System&, float aspect) {
 }
 
 // Menus stay 4:3: their art is many separate flat pieces that neither HUD layout keeps together.
-// 0x8C1DD1B4 is 3 from the race's first frame until it ends (0 in menus, 1 while loading); it
-// changes exactly twice per race. Attract demos never set it, so they stay 4:3.
-constexpr std::uint32_t kRaceState = 0x8C1DD1B4;
-bool widescreen_now(dream::System& sys) { return sys.memory.read32(kRaceState) == 3; }
+// 0x8C25C81C is the game's scene: 2 title, 3 menus, 4 loading, 5 the race from the first frame
+// after loading (intro fly-by, countdown, race, end sequence). 0x8C1DD0B8 is 1 on the title and
+// in attract demos, 0 in a player's race: it goes to 1 the moment a game over returns to the
+// title, and keeps demos 4:3. (The mode word 0x8C1DD1C4 lagged the intro by 50 frames; the race
+// clock's state 0x8C1DD1B4 missed the countdown and the results.)
+constexpr std::uint32_t kScene = 0x8C25C81C, kAttract = 0x8C1DD0B8;
+bool widescreen_now(dream::System& sys) {
+    return sys.memory.read32(kScene) == 5 && sys.memory.read32(kAttract) == 0;
+}
 
 const dreamcomp::PortInfo kInfo = [] {
     dreamcomp::PortInfo p;
