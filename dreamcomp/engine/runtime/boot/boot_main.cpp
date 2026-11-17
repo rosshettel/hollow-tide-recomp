@@ -16,9 +16,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#if defined(__APPLE__) || defined(__linux__)
-#include <execinfo.h>
-#endif
 #include <ctime>
 #include <fstream>
 #include <iterator>
@@ -27,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "dream/platform/backtrace.h"
 #include "dream/runtime/aica/aica.h"
 #include "dream/runtime/aica/rtc.h"
 #include "dream/runtime/gdrom/disc.h"
@@ -75,38 +73,9 @@ struct StopRun {
 // interrupt, so it names the last such point and not the instruction that faulted. The host stack
 // does name it: every guest function is a real C++ function called `fn_<address>`, so walking the
 // host stack and keeping those frames gives the guest call chain exactly, innermost first. Cheap,
-// and it needs nothing tracked while the run is going well.
-void print_guest_backtrace() {
-#if defined(__APPLE__) || defined(__linux__)
-    void* frames[64];
-    const int n = ::backtrace(frames, 64);
-    char** names = ::backtrace_symbols(frames, n);
-    if (!names)
-        return;
-    std::fprintf(stderr, "  guest call chain (innermost first):\n");
-    unsigned shown = 0;
-    for (int i = 0; i < n && shown < 12; ++i) {
-        // Keep the emitted guest functions and drop the runtime's own frames, which are the same
-        // half-dozen every time and say nothing about the title.
-        const char* fn = std::strstr(names[i], "fn_0c");
-        if (!fn)
-            fn = std::strstr(names[i], "fn_8c");
-        if (!fn)
-            continue;
-        char addr[16] = {};
-        std::snprintf(addr, sizeof addr, "%.11s", fn);
-        std::fprintf(stderr, "    %s\n", addr);
-        ++shown;
-    }
-    if (shown == 0)
-        std::fprintf(stderr,
-                     "    (no emitted frames on the stack; the fault is in the runtime "
-                     "or in interpreted code)\n");
-    std::free(names);
-#else
-    std::fprintf(stderr, "  guest call chain: not available on this platform\n");
-#endif
-}
+// and it needs nothing tracked while the run is going well. Implementation lives in the platform
+// shim (rule 2) so this file never includes <execinfo.h>.
+void print_guest_backtrace() { dream::platform::print_guest_backtrace(); }
 
 // CPU cycles the game thread used, set when the title's run ends (dreamcomp; report line).
 static std::uint64_t g_game_thread_cycles = 0;
@@ -836,9 +805,10 @@ struct Live {
             menu.move(-1);
         if (window.pressed(Control::Down))
             menu.move(1);
-        // The device row counts what is actually plugged in, so the selector wraps over the
-        // keyboard and however many pads are connected right now.
-        const unsigned devices = static_cast<unsigned>(window.devices().size());
+        // Three edit targets (keyboard / gamepad / joystick). Role rows on the joystick page
+        // cycle through whatever raw sticks are plugged in right now.
+        menu.set_joystick_choices(window.joystick_choices());
+        const unsigned devices = dream::render::kEditDeviceCount;
         if (window.pressed(Control::Left))
             menu.adjust(-1, devices);
         if (window.pressed(Control::Right))

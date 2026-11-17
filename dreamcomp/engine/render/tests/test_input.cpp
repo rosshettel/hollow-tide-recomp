@@ -23,8 +23,8 @@ TEST_CASE("every control has a distinct file key and label") {
 }
 
 TEST_CASE("a binding round-trips through its text form") {
-    for (const char* t :
-         {"key:Return", "key:Left Shift", "button:a", "axis:righttrigger+", "axis:lefty-"}) {
+    for (const char* t : {"key:Return", "key:Left Shift", "button:a", "axis:righttrigger+",
+                          "axis:lefty-", "jaxis:wheel:0+", "jaxis:pedals:1", "jbutton:handbrake:0"}) {
         Binding b;
         REQUIRE_MESSAGE(Binding::parse(t, b), t);
         CHECK(b.text() == t);
@@ -40,6 +40,29 @@ TEST_CASE("an axis without a half is rejected rather than guessed") {
     CHECK_FALSE(Binding::parse("key:", b));
     CHECK_FALSE(Binding::parse("wheel:x+", b));
     CHECK_FALSE(Binding::parse("noseparator", b));
+    CHECK_FALSE(Binding::parse("jaxis:nose:0+", b));
+    CHECK_FALSE(Binding::parse("jbutton:wheel", b));
+}
+
+TEST_CASE("joystick roles and full-range pedals round-trip through the file") {
+    Bindings a = Bindings::defaults();
+    a.joy_guid[static_cast<unsigned>(JoyRole::Wheel)] = "03000000deadbeef";
+    a.joy_guid[static_cast<unsigned>(JoyRole::Pedals)] = "03000000cafebabe";
+    a.joy_guid[static_cast<unsigned>(JoyRole::Handbrake)] = "03000000feedface";
+    a.joystick[PadControl::StickLeft] = Binding{BindSource::JoyAxis, "wheel:0", -1};
+    a.joystick[PadControl::StickRight] = Binding{BindSource::JoyAxis, "wheel:0", 1};
+    a.joystick[PadControl::RightTrigger] = Binding{BindSource::JoyAxis, "pedals:1", 0};
+    a.joystick[PadControl::LeftTrigger] = Binding{BindSource::JoyAxis, "pedals:2", 0};
+    a.joystick[PadControl::A] = Binding{BindSource::JoyAxis, "pedals:3", 0};
+    a.joystick.slot(PadControl::A, 1) = Binding{BindSource::JoyButton, "handbrake:0", 1};
+    const Bindings b = Bindings::from_text(a.to_text());
+    CHECK(b.joy_guid[0] == "03000000deadbeef");
+    CHECK(b.joy_guid[1] == "03000000cafebabe");
+    CHECK(b.joy_guid[2] == "03000000feedface");
+    CHECK(b.joystick[PadControl::StickLeft].text() == "jaxis:wheel:0-");
+    CHECK(b.joystick[PadControl::RightTrigger].text() == "jaxis:pedals:1");
+    CHECK(b.joystick[PadControl::RightTrigger].sign == 0);
+    CHECK(b.joystick.slot(PadControl::A, 1).text() == "jbutton:handbrake:0");
 }
 
 TEST_CASE("defaults are the keyboard table the launcher always had") {

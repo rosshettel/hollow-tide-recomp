@@ -34,6 +34,19 @@ constexpr Entry kEntries[] = {
 static_assert(sizeof kEntries / sizeof kEntries[0] == kPadControlCount,
               "every PadControl needs a file key and a label");
 
+struct RoleEntry {
+    JoyRole r;
+    const char* key;
+    const char* label;
+};
+constexpr RoleEntry kRoles[] = {
+    {JoyRole::Wheel, "wheel", "WHEEL"},
+    {JoyRole::Pedals, "pedals", "PEDALS"},
+    {JoyRole::Handbrake, "handbrake", "HANDBRAKE"},
+};
+static_assert(sizeof kRoles / sizeof kRoles[0] == kJoyRoleCount,
+              "every JoyRole needs a file key and a label");
+
 std::string trim(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
@@ -43,6 +56,23 @@ std::string trim(std::string_view s) {
 std::string upper(std::string s) {
     for (char& ch : s) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
     return s;
+}
+
+bool parse_joy_code(std::string_view code, std::string& role_and_index) {
+    // "wheel:0" / "pedals:12" — role key, colon, non-negative axis/button index.
+    const auto colon = code.find(':');
+    if (colon == std::string_view::npos || colon == 0 || colon + 1 >= code.size())
+        return false;
+    JoyRole role{};
+    if (!joy_role_from_key(code.substr(0, colon), role))
+        return false;
+    const std::string_view idx = code.substr(colon + 1);
+    if (idx.empty() || !std::all_of(idx.begin(), idx.end(), [](char c) {
+            return c >= '0' && c <= '9';
+        }))
+        return false;
+    role_and_index = std::string(code);
+    return true;
 }
 
 }  // namespace
@@ -65,6 +95,24 @@ bool pad_control_from_key(std::string_view key, PadControl& out) {
     return false;
 }
 
+const char* joy_role_key(JoyRole r) {
+    return kRoles[static_cast<unsigned>(r)].key;
+}
+
+const char* joy_role_label(JoyRole r) {
+    return kRoles[static_cast<unsigned>(r)].label;
+}
+
+bool joy_role_from_key(std::string_view key, JoyRole& out) {
+    for (const RoleEntry& e : kRoles) {
+        if (key == e.key) {
+            out = e.r;
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string Binding::text() const {
     switch (source) {
         case BindSource::Key:
@@ -73,6 +121,13 @@ std::string Binding::text() const {
             return "button:" + code;
         case BindSource::Axis:
             return "axis:" + code + (sign < 0 ? "-" : "+");
+        case BindSource::JoyAxis:
+            // sign 0 = full-range pedal (rest at the low end); +/- = centred half-axis (wheel).
+            if (sign == 0)
+                return "jaxis:" + code;
+            return "jaxis:" + code + (sign < 0 ? "-" : "+");
+        case BindSource::JoyButton:
+            return "jbutton:" + code;
         case BindSource::None:
             break;
     }
@@ -106,6 +161,28 @@ bool Binding::parse(std::string_view text, Binding& out) {
         code.pop_back();
         if (code.empty())
             return false;
+    } else if (kind == "jaxis") {
+        out.source = BindSource::JoyAxis;
+        out.sign = 0;  // full-range until a trailing +/- says otherwise
+        if (code.back() == '-') {
+            out.sign = -1;
+            code.pop_back();
+        } else if (code.back() == '+') {
+            out.sign = 1;
+            code.pop_back();
+        }
+        std::string normalised;
+        if (!parse_joy_code(code, normalised))
+            return false;
+        out.code = normalised;
+        return true;
+    } else if (kind == "jbutton") {
+        out.source = BindSource::JoyButton;
+        std::string normalised;
+        if (!parse_joy_code(code, normalised))
+            return false;
+        out.code = normalised;
+        return true;
     } else {
         return false;
     }
@@ -118,6 +195,13 @@ std::string Binding::label() const {
         return "--";
     if (source == BindSource::Axis)
         return upper(code) + (sign < 0 ? " -" : " +");
+    if (source == BindSource::JoyAxis) {
+        if (sign == 0)
+            return upper(code);
+        return upper(code) + (sign < 0 ? " -" : " +");
+    }
+    if (source == BindSource::JoyButton)
+        return upper(code);
     return upper(code);
 }
 
@@ -164,6 +248,8 @@ Bindings Bindings::defaults() {
     k.gamepad[PadControl::StickDown] = axis("lefty", 1);
     k.gamepad[PadControl::StickLeft] = axis("leftx", -1);
     k.gamepad[PadControl::StickRight] = axis("leftx", 1);
+    // Joystick bindings stay empty: axis indices differ per wheel/pedal box, so the player assigns
+    // roles and captures axes once on the machine that has the hardware.
     return k;
 }
 
@@ -171,9 +257,14 @@ std::string Bindings::to_text() const {
     std::ostringstream o;
     o << "# dream-recomp input bindings. Rewritten whenever they change in the UI.\n"
       << "# Physical inputs are SDL's own names, so this file survives an SDL upgrade.\n"
+      << "# Joystick roles (wheel/pedals/handbrake) are SDL GUID hex; jaxis/jbutton name the role.\n"
       << "version = 1\n"
       << "deadzone = " << deadzone_percent << "\n"
       << "trigger_ramp = " << (trigger_ramp ? 1 : 0) << "\n";
+    for (unsigned i = 0; i < kJoyRoleCount; ++i) {
+        const auto r = static_cast<JoyRole>(i);
+        o << joy_role_key(r) << "_device = " << joy_guid[i] << "\n";
+    }
     auto section = [&o](const char* name, const DeviceBindings& d) {
         o << "\n[" << name << "]\n";
         for (unsigned i = 0; i < kPadControlCount; ++i) {
@@ -189,6 +280,7 @@ std::string Bindings::to_text() const {
     };
     section("keyboard", keyboard);
     section("gamepad", gamepad);
+    section("joystick", joystick);
     return o.str();
 }
 
@@ -216,6 +308,8 @@ Bindings Bindings::from_text(std::string_view text, std::string* warnings) {
                 current = &out.keyboard;
             else if (name == "gamepad")
                 current = &out.gamepad;
+            else if (name == "joystick")
+                current = &out.joystick;
             else {
                 current = nullptr;
                 warn("line " + std::to_string(lineno) + ": unknown section [" + name + "]");
@@ -240,6 +334,12 @@ Bindings Bindings::from_text(std::string_view text, std::string* warnings) {
                 }
             } else if (key == "trigger_ramp") {
                 out.trigger_ramp = value != "0";
+            } else if (key.size() > 7 && key.compare(key.size() - 7, 7, "_device") == 0) {
+                JoyRole role{};
+                if (joy_role_from_key(key.substr(0, key.size() - 7), role))
+                    out.joy_guid[static_cast<unsigned>(role)] = value;
+                else
+                    warn("line " + std::to_string(lineno) + ": unknown setting " + key);
             } else if (key != "version") {
                 warn("line " + std::to_string(lineno) + ": unknown setting " + key);
             }

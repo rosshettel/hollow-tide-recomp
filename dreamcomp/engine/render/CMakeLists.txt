@@ -87,8 +87,9 @@ add_library(dream_render_vk STATIC
 add_dependencies(dream_render_vk dream_render_shaders)
 target_include_directories(dream_render_vk PUBLIC include PRIVATE ${_spv_dir})
 target_link_libraries(dream_render_vk PUBLIC dream::render Vulkan::Vulkan SDL3::SDL3)
-if(WIN32)
-  # dreamcomp: DXGI flip-model presentation (src/vk/dxgi_present.cpp).
+if(WIN32 AND DREAM_DXGI)
+  # Optional DXGI flip-model presentation (src/vk/dxgi_present.cpp). Off by default (rule 2).
+  target_compile_definitions(dream_render_vk PRIVATE DREAM_DXGI=1)
   target_link_libraries(dream_render_vk PRIVATE d3d11 dxgi)
 endif()
 dream_target_defaults(dream_render_vk)

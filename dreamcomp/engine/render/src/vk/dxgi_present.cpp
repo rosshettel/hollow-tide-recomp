@@ -3,7 +3,7 @@
 
 #include "dream/render/vk/context.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(DREAM_DXGI)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -26,7 +26,7 @@
 
 namespace dream::render::vk {
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(DREAM_DXGI)
 
 namespace {
 
@@ -487,12 +487,12 @@ std::string DxgiPresenter::description() const {
     return "DXGI flip model (D3D11 on " + impl_->adapter + (impl_->tearing ? ", tearing allowed)" : ")");
 }
 
-#else  // !_WIN32
+#else  // !(_WIN32 && DREAM_DXGI)
 
 struct DxgiPresenter::Impl {};
 
 std::unique_ptr<DxgiPresenter> DxgiPresenter::create(Context&, void*, std::string& error) {
-    error = "DXGI exists only on Windows";
+    error = "DXGI presenter is not built into this binary (DREAM_DXGI=OFF)";
     return nullptr;
 }
 DxgiPresenter::~DxgiPresenter() = default;

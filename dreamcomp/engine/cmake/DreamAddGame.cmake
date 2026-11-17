@@ -22,6 +22,8 @@
 
 set(DREAM_TRANSLATE_EXTRA_FLAGS "" CACHE STRING
     "Extra dream-translate flags for the game units (--trace, --no-irq); development trees only")
+set(DREAM_TRANSLATE_EXECUTABLE "" CACHE FILEPATH
+    "Host dream-translate binary when cross-compiling (the in-tree target is a target-OS exe)")
 
 function(dream_add_game id)
   cmake_parse_arguments(ARG "BOOT_TEST" "TITLE" "" ${ARGN})
@@ -86,10 +88,19 @@ function(dream_add_game id)
   endif()
 
   separate_arguments(DREAM_TRANSLATE_EXTRA_FLAGS)
+  # Cross builds (mingw from macOS) cannot run the target dream-translate.exe; point this at a
+  # host-built translator instead. Same flags and outputs either way.
+  if(DREAM_TRANSLATE_EXECUTABLE)
+    set(_dream_translate "${DREAM_TRANSLATE_EXECUTABLE}")
+    set(_dream_translate_dep "${DREAM_TRANSLATE_EXECUTABLE}")
+  else()
+    set(_dream_translate dream-translate)
+    set(_dream_translate_dep dream-translate)
+  endif()
   add_custom_command(
     OUTPUT ${_units} ${_headers}
-    COMMAND dream-translate game --config ${_toml_path} --out-dir ${_gen} ${DREAM_TRANSLATE_EXTRA_FLAGS}
-    DEPENDS dream-translate ${_toml_path} ${_symbols} ${_bin}
+    COMMAND ${_dream_translate} game --config ${_toml_path} --out-dir ${_gen} ${DREAM_TRANSLATE_EXTRA_FLAGS}
+    DEPENDS ${_dream_translate_dep} ${_toml_path} ${_symbols} ${_bin}
     COMMENT "Translating ${ARG_TITLE}"
     VERBATIM)
 
@@ -102,7 +113,7 @@ function(dream_add_game id)
 
   add_executable(${id}_boot ${DREAM_ROOT}/runtime/boot/boot_main.cpp)
   target_link_libraries(${id}_boot PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${id}_gen>"
-                                           dream::runtime dream::translator)
+                                           dream::runtime dream::translator dream::platform)
   # --window needs the Vulkan backend, which is optional (render/CMakeLists.txt returns early when
   # Vulkan, SDL3 or glslc are missing). Without it the launcher still builds and runs headless, and
   # --window says this build has no renderer rather than doing nothing.

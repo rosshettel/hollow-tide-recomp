@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "dream/render/input.h"
@@ -19,6 +20,7 @@
 
 struct SDL_Window;
 struct SDL_Gamepad;
+struct SDL_Joystick;
 
 namespace dream::render::vk {
 
@@ -174,9 +176,13 @@ public:
     // fully up is most of why a driving game needs a pad.
     float pad_value(PadControl c) const noexcept;
 
-    // "KEYBOARD" first, then one row per connected pad. Rebuilt on hot-plug.
+    // Edit targets for the binding screen: KEYBOARD, GAMEPAD, JOYSTICK. Rebuilt on hot-plug.
     const std::vector<std::string>& devices() const noexcept { return devices_; }
     bool gamepad_connected() const noexcept { return !pads_.empty(); }
+    // Connected raw joysticks (wheels, pedal boxes, handbrakes): (GUID hex, display name).
+    const std::vector<std::pair<std::string, std::string>>& joystick_choices() const noexcept {
+        return joy_choices_;
+    }
 
     // Rebinding: the next physical input becomes a Binding rather than reaching the game. Escape
     // cancels. While capturing, pad_held() reports nothing, so the key being bound cannot also be
@@ -234,12 +240,14 @@ private:
     // One binding resolved to the codes SDL actually compares against.
     struct Resolved {
         BindSource source = BindSource::None;
-        int code = 0;
-        int sign = 1;
+        int code = 0;   // scancode, gamepad button/axis, or joy axis/button index
+        int sign = 1;   // axis half; 0 = full-range pedal for JoyAxis
+        int role = -1;  // JoyRole index for JoyAxis/JoyButton; -1 otherwise
     };
     Bindings bindings_;
     Resolved key_[kBindingSlots][kPadControlCount]{};
     Resolved gpad_[kBindingSlots][kPadControlCount]{};
+    Resolved joy_[kBindingSlots][kPadControlCount]{};
     bool pad_held_[kMaxPlayers][kPadControlCount]{};
     bool pad_pressed_[kMaxPlayers][kPadControlCount]{};
     float pad_value_[kMaxPlayers][kPadControlCount]{};
@@ -249,7 +257,16 @@ private:
     std::uint64_t last_poll_ns_ = 0;
 
     std::vector<SDL_Gamepad*> pads_;
+    struct JoyDev {
+        SDL_Joystick* joy = nullptr;
+        std::string guid;
+        std::string name;
+    };
+    std::vector<JoyDev> joys_;
     std::vector<std::string> devices_;
+    std::vector<std::pair<std::string, std::string>> joy_choices_;
+    SDL_Joystick* joystick_for_role(JoyRole role) const noexcept;
+    std::string guid_for_instance(std::uint32_t instance_id) const;
     void refresh_devices();
     VkPresentModeKHR choose_present_mode() const;
 

@@ -25,6 +25,9 @@ option(DREAM_WERROR "Treat warnings as errors in dream targets" ON)
 option(DREAM_RENDERER
   "Build the Vulkan renderer and the SDL3 window (WP2.3). Needs the Vulkan SDK and SDL3; without
    them the rest of the project still builds." ON)
+option(DREAM_DXGI
+  "Windows: build the optional DXGI flip-model presenter (links d3d11/dxgi). Off by default —
+   rule 2 keeps the Vulkan swapchain as the only present path unless this is turned on." OFF)
 set(DREAM_FLYCAST_CORE "" CACHE FILEPATH
     "Flycast libretro core built with tools/flycast/oracle; enables the differential test")
 
@@ -51,6 +54,7 @@ else()
   message(FATAL_ERROR "third_party/libchdr is empty: run `git submodule update --init --recursive`")
 endif()
 
+add_subdirectory(platform)
 add_subdirectory(runtime)
 # toml++ (MIT, third_party/tomlplusplus): per-game configuration files (ADR 14). Header-only.
 add_library(dream_toml INTERFACE)

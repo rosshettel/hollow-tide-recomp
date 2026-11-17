@@ -2,6 +2,7 @@
 #include "dream/render/vk/window.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <mutex>
@@ -70,10 +71,11 @@ Window::~Window() {
 }
 
 bool Window::create(const char* title, int width, int height, bool want_validation) {
-    // Gamepads are optional: a machine with none, or an SDL built without the subsystem, still
-    // gets a window and a keyboard. Failing the whole launch over a missing joystick driver would
-    // be a poor trade.
-    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD))
+    // Gamepads and raw joysticks are optional: a machine with none, or an SDL built without the
+    // subsystem, still gets a window and a keyboard. Failing the whole launch over a missing
+    // joystick driver would be a poor trade. Joystick is needed for wheels and pedal boxes that
+    // SDL does not expose as gamepads.
+    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD | SDL_INIT_JOYSTICK))
         SDL_ClearError();
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         error_ = std::string("SDL_Init: ") + SDL_GetError();
@@ -393,20 +395,62 @@ bool Window::recreate_swapchain() {
     return create_swapchain();
 }
 
+std::string Window::guid_for_instance(std::uint32_t instance_id) const {
+    const SDL_GUID g = SDL_GetJoystickGUIDForID(static_cast<SDL_JoystickID>(instance_id));
+    char buf[64]{};
+    SDL_GUIDToString(g, buf, static_cast<int>(sizeof buf));
+    return buf;
+}
+
+SDL_Joystick* Window::joystick_for_role(JoyRole role) const noexcept {
+    const std::string& want = bindings_.joy_guid[static_cast<unsigned>(role)];
+    if (want.empty())
+        return nullptr;
+    for (const JoyDev& j : joys_)
+        if (j.joy && j.guid == want)
+            return j.joy;
+    return nullptr;
+}
+
 void Window::refresh_devices() {
     for (SDL_Gamepad* g : pads_)
         if (g)
             SDL_CloseGamepad(g);
     pads_.clear();
-    devices_.clear();
-    devices_.push_back("KEYBOARD");
+    for (JoyDev& j : joys_)
+        if (j.joy)
+            SDL_CloseJoystick(j.joy);
+    joys_.clear();
+    joy_choices_.clear();
+    // Fixed edit targets for the binding screen. Connected pad/joystick *names* show on the
+    // joystick role rows; the gamepad set is shared across every recognised pad.
+    devices_ = {"KEYBOARD", "GAMEPAD", "JOYSTICK"};
     int count = 0;
     if (SDL_JoystickID* ids = SDL_GetGamepads(&count)) {
         for (int i = 0; i < count; ++i) {
-            if (SDL_Gamepad* g = SDL_OpenGamepad(ids[i])) {
+            if (SDL_Gamepad* g = SDL_OpenGamepad(ids[i]))
                 pads_.push_back(g);
-                const char* name = SDL_GetGamepadName(g);
-                devices_.push_back(name && *name ? name : "GAMEPAD");
+        }
+        SDL_free(ids);
+    }
+    count = 0;
+    if (SDL_JoystickID* ids = SDL_GetJoysticks(&count)) {
+        for (int i = 0; i < count; ++i) {
+            // Skip sticks that are already open as gamepads: their axes are read through the
+            // gamepad bindings. Wheels and pedal boxes usually are not gamepads.
+            if (SDL_IsGamepad(ids[i]))
+                continue;
+            if (SDL_Joystick* j = SDL_OpenJoystick(ids[i])) {
+                JoyDev dev;
+                dev.joy = j;
+                dev.guid = guid_for_instance(ids[i]);
+                const char* name = SDL_GetJoystickName(j);
+                dev.name = name && *name ? name : "JOYSTICK";
+                // Upper-case for the overlay font.
+                for (char& ch : dev.name)
+                    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                joy_choices_.emplace_back(dev.guid, dev.name);
+                joys_.push_back(std::move(dev));
             }
         }
         SDL_free(ids);
@@ -417,7 +461,7 @@ void Window::set_bindings(const Bindings& b) {
     bindings_ = b;
     // Names to codes once, here. Doing it per frame would mean a string lookup per control per
     // frame, and would also mean a typo in the file costing performance rather than being noticed.
-    auto resolve = [](const DeviceBindings& d, Resolved* out, unsigned slot, bool keyboard) {
+    auto resolve_pad = [](const DeviceBindings& d, Resolved* out, unsigned slot, bool keyboard) {
         for (unsigned i = 0; i < kPadControlCount; ++i) {
             const Binding& bind = d.slot(static_cast<PadControl>(i), slot);
             out[i] = Resolved{};
@@ -426,23 +470,49 @@ void Window::set_bindings(const Bindings& b) {
             if (keyboard && bind.source == BindSource::Key) {
                 const SDL_Scancode sc = SDL_GetScancodeFromName(bind.code.c_str());
                 if (sc != SDL_SCANCODE_UNKNOWN)
-                    out[i] = Resolved{BindSource::Key, static_cast<int>(sc), 1};
+                    out[i] = Resolved{BindSource::Key, static_cast<int>(sc), 1, -1};
             } else if (!keyboard && bind.source == BindSource::Button) {
                 const SDL_GamepadButton bt = SDL_GetGamepadButtonFromString(bind.code.c_str());
                 if (bt != SDL_GAMEPAD_BUTTON_INVALID)
-                    out[i] = Resolved{BindSource::Button, static_cast<int>(bt), 1};
+                    out[i] = Resolved{BindSource::Button, static_cast<int>(bt), 1, -1};
             } else if (!keyboard && bind.source == BindSource::Axis) {
                 const SDL_GamepadAxis ax = SDL_GetGamepadAxisFromString(bind.code.c_str());
                 if (ax != SDL_GAMEPAD_AXIS_INVALID)
-                    out[i] = Resolved{BindSource::Axis, static_cast<int>(ax), bind.sign};
+                    out[i] = Resolved{BindSource::Axis, static_cast<int>(ax), bind.sign, -1};
             }
             // Anything that did not resolve stays unbound: an unknown name must not throw, and
             // must not silently become scancode 0, which is a real key.
         }
     };
+    auto resolve_joy = [](const DeviceBindings& d, Resolved* out, unsigned slot) {
+        for (unsigned i = 0; i < kPadControlCount; ++i) {
+            const Binding& bind = d.slot(static_cast<PadControl>(i), slot);
+            out[i] = Resolved{};
+            if (!bind.bound())
+                continue;
+            if (bind.source != BindSource::JoyAxis && bind.source != BindSource::JoyButton)
+                continue;
+            const auto colon = bind.code.find(':');
+            if (colon == std::string::npos)
+                continue;
+            JoyRole role{};
+            if (!joy_role_from_key(bind.code.substr(0, colon), role))
+                continue;
+            int index = -1;
+            try {
+                index = std::stoi(bind.code.substr(colon + 1));
+            } catch (...) {
+                continue;
+            }
+            if (index < 0)
+                continue;
+            out[i] = Resolved{bind.source, index, bind.sign, static_cast<int>(role)};
+        }
+    };
     for (unsigned s = 0; s < kBindingSlots; ++s) {
-        resolve(bindings_.keyboard, key_[s], s, true);
-        resolve(bindings_.gamepad, gpad_[s], s, false);
+        resolve_pad(bindings_.keyboard, key_[s], s, true);
+        resolve_pad(bindings_.gamepad, gpad_[s], s, false);
+        resolve_joy(bindings_.joystick, joy_[s], s);
     }
     SDL_ClearError();
 }
@@ -500,6 +570,8 @@ bool Window::poll() {
                 break;
             case SDL_EVENT_GAMEPAD_ADDED:
             case SDL_EVENT_GAMEPAD_REMOVED:
+            case SDL_EVENT_JOYSTICK_ADDED:
+            case SDL_EVENT_JOYSTICK_REMOVED:
                 // Hot-plug: rebuild the list and drop every held state. A pad yanked mid-race must
                 // release the accelerator rather than leave it held at its last value.
                 refresh_devices();
@@ -556,6 +628,55 @@ bool Window::poll() {
                     }
                 }
                 break;
+            case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+                if (capturing_ && !captured_this_poll) {
+                    const std::string guid = guid_for_instance(ev.jbutton.which);
+                    JoyRole role = JoyRole::Count;
+                    for (unsigned r = 0; r < kJoyRoleCount; ++r) {
+                        if (bindings_.joy_guid[r] == guid) {
+                            role = static_cast<JoyRole>(r);
+                            break;
+                        }
+                    }
+                    if (role != JoyRole::Count) {
+                        captured_this_poll = true;
+                        captured_ = true;
+                        capturing_ = false;
+                        capture_ = Binding{BindSource::JoyButton,
+                                           std::string(joy_role_key(role)) + ":" +
+                                               std::to_string(ev.jbutton.button),
+                                           1};
+                    }
+                }
+                break;
+            case SDL_EVENT_JOYSTICK_AXIS_MOTION:
+                // Pedals rest at one end and swing the full int16 range; wheels are centred.
+                // Capture uses a high threshold either way so a resting axis never self-binds.
+                if (capturing_ && !captured_this_poll && std::abs(ev.jaxis.value) > 20000) {
+                    const std::string guid = guid_for_instance(ev.jaxis.which);
+                    JoyRole role = JoyRole::Count;
+                    for (unsigned r = 0; r < kJoyRoleCount; ++r) {
+                        if (bindings_.joy_guid[r] == guid) {
+                            role = static_cast<JoyRole>(r);
+                            break;
+                        }
+                    }
+                    if (role != JoyRole::Count) {
+                        captured_this_poll = true;
+                        captured_ = true;
+                        capturing_ = false;
+                        const std::string code =
+                            std::string(joy_role_key(role)) + ":" + std::to_string(ev.jaxis.axis);
+                        // Pedals and handbrake: full-range (rest at the low end). Wheel: half-axis
+                        // from centre, matching stick left/right.
+                        if (role == JoyRole::Wheel)
+                            capture_ = Binding{BindSource::JoyAxis, code,
+                                               ev.jaxis.value < 0 ? -1 : 1};
+                        else
+                            capture_ = Binding{BindSource::JoyAxis, code, 0};
+                    }
+                }
+                break;
             default:
                 break;
         }
@@ -585,7 +706,7 @@ bool Window::poll() {
 
     const float dead = static_cast<float>(bindings_.deadzone_percent) / 100.0f;
     for (unsigned p = 0; p < kMaxPlayers; ++p) {
-    // Keyboard drives player 0; pad N drives player N (connection order).
+    // Keyboard and joystick drive player 0; pad N drives player N (connection order).
     SDL_Gamepad* const player_pad = p < pads_.size() ? pads_[p] : nullptr;
     for (unsigned i = 0; i < kPadControlCount; ++i) {
         // Digital and analogue sources are gathered separately, because only a digital one ramps.
@@ -598,6 +719,7 @@ bool Window::poll() {
             for (unsigned s = 0; s < kBindingSlots; ++s) {
             const Resolved& kb = key_[s][i];
             const Resolved& gb = gpad_[s][i];
+            const Resolved& jb = joy_[s][i];
             if (p == 0 && keys && kb.source == BindSource::Key && keys[kb.code])
                 digital_on = true;
             if (SDL_Gamepad* g = player_pad) {
@@ -616,6 +738,27 @@ bool Window::poll() {
                         // would jump to `dead` the instant it left the centre.
                         analogue =
                             std::max(analogue, std::min(1.0f, (half - dead) / (1.0f - dead)));
+                    }
+                }
+            }
+            if (p == 0 && jb.role >= 0) {
+                if (SDL_Joystick* j = joystick_for_role(static_cast<JoyRole>(jb.role))) {
+                    if (jb.source == BindSource::JoyButton) {
+                        if (SDL_GetJoystickButton(j, jb.code))
+                            digital_on = true;
+                    } else if (jb.source == BindSource::JoyAxis) {
+                        const Sint16 raw_i = SDL_GetJoystickAxis(j, jb.code);
+                        if (jb.sign == 0) {
+                            // Full-range pedal: rest at INT16_MIN -> 0, full press -> 1.
+                            const float v = (static_cast<float>(raw_i) + 32768.0f) / 65535.0f;
+                            analogue = std::max(analogue, std::clamp(v, 0.0f, 1.0f));
+                        } else {
+                            const float raw = static_cast<float>(raw_i) / 32767.0f;
+                            const float half = jb.sign < 0 ? -raw : raw;
+                            if (half > dead)
+                                analogue = std::max(
+                                    analogue, std::min(1.0f, (half - dead) / (1.0f - dead)));
+                        }
                     }
                 }
             }

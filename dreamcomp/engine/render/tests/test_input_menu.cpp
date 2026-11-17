@@ -93,27 +93,54 @@ TEST_CASE("the device row cycles and the dead zone clamps") {
     InputMenu m = opened();
     m.move(-3);  // from the first binding row up to the device row
     CHECK(m.device() == 0);
-    m.adjust(1, 2);
+    m.adjust(1);
     CHECK(m.device() == 1);
-    m.adjust(1, 2);
+    m.adjust(1);
+    CHECK(m.device() == 2);  // joystick
+    m.adjust(1);
     CHECK(m.device() == 0);  // wraps rather than sticking at the end
-    m.move(1);               // dead zone
-    for (int i = 0; i < 40; ++i) m.adjust(1, 2);
+    m.move(1);              // dead zone
+    for (int i = 0; i < 40; ++i) m.adjust(1);
     CHECK(m.bindings().deadzone_percent == 90);
-    for (int i = 0; i < 40; ++i) m.adjust(-1, 2);
+    for (int i = 0; i < 40; ++i) m.adjust(-1);
     CHECK(m.bindings().deadzone_percent == 0);
 }
 
 TEST_CASE("editing follows the selected device") {
     InputMenu m = opened();
     m.move(-3);
-    m.adjust(1, 2);  // gamepad
+    m.adjust(1);  // gamepad
     go_to(m, PadControl::A);
     m.move(3);  // back down to the first binding row
     m.activate();
     m.apply_capture(Binding{BindSource::Button, "back", 1}, false);
     CHECK(m.bindings().gamepad[PadControl::A].text() == "button:back");
     CHECK(m.bindings().keyboard[PadControl::A].text() == "key:Z");  // the keyboard is untouched
+}
+
+TEST_CASE("joystick page assigns roles and a second boost slot") {
+    InputMenu m = opened();
+    m.set_joystick_choices({{"guid-wheel", "G29"}, {"guid-pedals", "PEDALS"}, {"guid-hb", "HB"}});
+    m.move(-3);   // device row
+    m.adjust(2);  // joystick
+    REQUIRE(m.device() == 2);
+    m.move(1);  // wheel role
+    m.adjust(1);
+    CHECK(m.bindings().joy_guid[static_cast<unsigned>(JoyRole::Wheel)] == "guid-wheel");
+    m.move(1);  // pedals
+    m.adjust(2);
+    CHECK(m.bindings().joy_guid[static_cast<unsigned>(JoyRole::Pedals)] == "guid-pedals");
+    // first_binding for joystick is 6; from pedals (row 2) move +4 to A.
+    for (int i = 0; i < 4; ++i) m.move(1);
+    m.activate();
+    m.apply_capture(Binding{BindSource::JoyAxis, "pedals:3", 0}, false);
+    CHECK(m.bindings().joystick[PadControl::A].text() == "jaxis:pedals:3");
+    m.adjust(1);  // slot 1 (handbrake / second boost)
+    CHECK(m.edit_slot() == 1);
+    m.activate();
+    m.apply_capture(Binding{BindSource::JoyButton, "handbrake:0", 1}, false);
+    CHECK(m.bindings().joystick.slot(PadControl::A, 1).text() == "jbutton:handbrake:0");
+    CHECK(m.bindings().joystick[PadControl::A].text() == "jaxis:pedals:3");
 }
 
 TEST_CASE("reset restores one device, not both") {
