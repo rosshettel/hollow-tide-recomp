@@ -88,6 +88,7 @@ public:
     bool playable() const;
     void set_pads(std::vector<std::string> names);
     void refresh_pads();
+    void refresh_joysticks();  // raw wheels / pedals / handbrakes (not SDL gamepads)
     Rml::Element* focused() const;
     std::string focus_id() const;
     Rml::Element* element(const std::string& id) const;
@@ -151,14 +152,20 @@ private:
 
     // Controls tab (N64 recomp layout): player cards, then one profile's mappings with two slots
     // per input. Bindings are edited in place and saved at once, as RecompFrontend does.
+    // A third profile (joystick) covers steering wheels / pedal boxes / handbrakes via raw SDL
+    // joysticks and the same [joystick] section the engine reads.
     std::string controls_cards();
     std::string controls_mappings();
     std::string controls_footer();
+    std::string controls_role_rows();
     void load_bindings();
     void save_bindings();
     dream::render::DeviceBindings& editing();
     bool capture_event(const SDL_Event& ev);
     void finish_capture(const dream::render::Binding* b);
+    void cycle_joy_role(dream::render::JoyRole role, int delta);
+    std::string role_device_label(dream::render::JoyRole role) const;
+    std::string guid_for_instance(std::uint32_t instance_id) const;
 
     UiConfig cfg_;
     Mode mode_;
@@ -190,10 +197,16 @@ private:
     bool dialog_open_ = false;
 
     std::vector<std::string> pads_;
+    struct JoyChoice {
+        std::string guid;
+        std::string name;
+        bool operator==(const JoyChoice&) const = default;
+    };
+    std::vector<JoyChoice> joys_;
     dream::render::Bindings bindings_;
     bool bindings_loaded_ = false;
     int ctl_view_ = 0;    // 0 player cards, 1 mappings
-    int ctl_device_ = 1;  // 0 keyboard, 1 controller
+    int ctl_device_ = 1;  // 0 keyboard, 1 controller, 2 joystick (wheel/pedals)
     struct Capture {
         bool active = false;
         unsigned control = 0, slot = 0;

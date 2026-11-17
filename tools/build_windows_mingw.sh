@@ -70,13 +70,18 @@ mkdir -p "$dist"
 cp "$exe" "$dist/hydro-thunder.exe"
 cp "$sdl_root/bin/SDL3.dll" "$dist/"
 # MinGW runtime (the three "DLL was not found" errors without these).
-mingw_root="$(dirname "$(dirname "$(command -v x86_64-w64-mingw32-g++)")")/x86_64-w64-mingw32"
+# -print-file-name finds them regardless of Homebrew cellar layout / symlinks.
 for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-  src=""
-  for cand in "$mingw_root/bin/$dll" "$mingw_root/lib/$dll"; do
-    [[ -f "$cand" ]] && src=$cand && break
-  done
-  [[ -n "$src" ]] || { echo "missing MinGW runtime $dll under $mingw_root" >&2; exit 1; }
+  src="$(x86_64-w64-mingw32-g++ -print-file-name="$dll")"
+  if [[ ! -f "$src" ]]; then
+    # pthread often lives only under the target bin/
+    gcc_bin="$(dirname "$(readlink -f "$(command -v x86_64-w64-mingw32-g++)" 2>/dev/null ||
+      realpath "$(command -v x86_64-w64-mingw32-g++)")")"
+    for cand in "$gcc_bin/../x86_64-w64-mingw32/bin/$dll" "$gcc_bin/../x86_64-w64-mingw32/lib/$dll"; do
+      [[ -f "$cand" ]] && src=$cand && break
+    done
+  fi
+  [[ -f "$src" ]] || { echo "missing MinGW runtime $dll (g++ said: $src)" >&2; exit 1; }
   cp "$src" "$dist/"
 done
 # Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
@@ -143,18 +148,19 @@ Keyboard defaults (same as macOS)
 
 Steering wheel + pedals
 -----------------------
+Use the dreamcomp Controls tab (not F1 — F1 is the HUD editor).
+
 1. Plug in the wheel, pedal box, and optional handbrake.
-2. Press F1 to open CONTROLLER.
-3. DEVICE -> JOYSTICK.
-4. Set WHEEL / PEDALS / HANDBRAKE to the matching devices (left/right).
-5. Bind:
-     STICK LEFT / RIGHT  <- turn the wheel each way
-     R TRIGGER           <- press gas (accelerate)
-     L TRIGGER           <- press brake
-     A                   <- press clutch (boost)
-     A .2 (left/right on the A row, then Return) <- handbrake for boost, optional
-6. CLOSE — bindings save under %APPDATA%\dreamcomp\hydrothunder\bindings.txt
-   so you only set this up once on that PC.
+2. Before Start Game: Controls -> Wheel / pedals -> Edit Profile
+   (or in-game: Escape -> Controls -> same / footer toggle to W).
+3. Click WHEEL / PEDALS / HANDBRAKE to assign each device.
+4. Click a binding box, then use the hardware:
+     Analog Left / Right  <- wheel
+     R Trigger            <- gas
+     L Trigger            <- brake
+     A                    <- clutch (boost)
+     A's second box       <- optional handbrake boost
+5. Saved immediately under %APPDATA%\dreamcomp\hydrothunder\bindings.txt
 
 Optional (launcher Settings, or later)
 --------------------------------------

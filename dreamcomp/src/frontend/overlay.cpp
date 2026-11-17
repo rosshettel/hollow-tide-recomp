@@ -395,6 +395,7 @@ struct Overlay::Impl {
         need_render = true;
         laid_out = DrawMode{};
         ui->refresh_pads();
+        ui->refresh_joysticks();
         ui->open_panel();  // the last tab used
         std::printf("overlay: open\n");
     }

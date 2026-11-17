@@ -40,15 +40,16 @@ file uses SDL key names, so Windows sees the same defaults. Seeded once to
 
 ## Wheel / pedals / handbrake
 
-Raw SDL joysticks (not the gamepad API):
+Configure in dreamcomp’s **Controls** tab (launcher before Start, or Escape in-game).
+F1 opens the HUD editor; it does not open bindings.
 
-1. F1 → CONTROLLER → DEVICE → JOYSTICK
-2. Assign WHEEL / PEDALS / HANDBRAKE (left/right cycles plugged-in sticks by SDL GUID)
-3. Bind axes/buttons by pressing them:
-   - STICK LEFT/RIGHT ← wheel
-   - R TRIGGER ← gas, L TRIGGER ← brake (full-range pedal axes)
-   - A ← clutch (boost); left/right on A selects slot `.2` for an optional handbrake boost
-4. CLOSE — written to the bindings file (roles + `jaxis`/`jbutton` lines)
+1. Controls → **Wheel / pedals** → Edit Profile (or footer toggle to **W**)
+2. Click WHEEL / PEDALS / HANDBRAKE to assign each physical device
+3. Bind by clicking a box then using the hardware:
+   - Analog Left/Right ← wheel
+   - R Trigger ← gas, L Trigger ← brake
+   - A ← clutch (boost); A’s second box ← optional handbrake boost
+4. Saved immediately to `%APPDATA%\dreamcomp\hydrothunder\bindings.txt`
 
 `unlock_all` and widescreen remain port hooks in `src/` (not Mac-only).
 

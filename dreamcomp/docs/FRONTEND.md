@@ -69,20 +69,21 @@ Copied from the N64 ports' RecompFrontend Controls tab (Wave Race 64 configurati
 
 | View | Contents |
 |---|---|
-| Player cards | one box per player (`PortInfo::players`, Soulcalibur 2): "Player N", a large PromptFont device glyph (gamepad U+243C / keyboard U+243D), the device name; **Edit Profile** (disabled with no controller). Player 1 = keyboard + controller 1; player N = controller N, in connection order |
-| Mappings | "Editing: Keyboard/Controller profile" + **Go back**; one row per Dreamcast input (Analog Up/Down/Left/Right, A, B, X, Y, L/R Trigger, Start, D-Pad ×4) with **two binding boxes** (either one drives the input) and a round ✗ that clears both; footer: controller/keyboard switch and **Reset to defaults** |
+| Player cards | one box per player (`PortInfo::players`, Soulcalibur 2): "Player N", a large PromptFont device glyph (gamepad U+243C / keyboard U+243D), the device name; **Edit Profile** (disabled with no controller). Player 1 = keyboard + controller 1; player N = controller N, in connection order. Plus a **Wheel / pedals** card for the joystick profile (raw SDL joysticks: wheels, pedal boxes, handbrakes) |
+| Mappings | "Editing: Keyboard/Controller/Joystick profile" + **Go back**; on the joystick profile, **WHEEL / PEDALS / HANDBRAKE** device rows (click to cycle plugged-in sticks by SDL GUID) then one row per Dreamcast input with **two binding boxes** and a round ✗; footer: gamepad / keyboard / wheel (`W`) switch and **Reset to defaults** |
 
 Bindings show as PromptFont glyphs with RecompFrontend's code-point table
 (`recompinput/src/input_types.cpp`: Xbox-style face buttons, A = U+21A7, sticks, triggers, keyboard
 letters as U+FF21…, F1–F12 as U+2460…, PromptFont's swapped up/right arrows); a key PromptFont has
-no glyph for shows its name. Click a box (or Enter / A on it): it turns red and the next key
-(keyboard profile) or button / stick direction past half travel (controller profile) is bound;
+no glyph for shows its name (joystick bindings always show text like `WHEEL:0 +`). Click a box (or
+Enter / A on it): it turns red and the next key (keyboard), button / stick (controller), or raw
+joystick axis / button (joystick profile — device must already be assigned a role) is bound;
 Escape, a pad's Select, or a click elsewhere cancels. Changes are written to the bindings file at
 once (the engine's per-user `bindings.txt`, or `--bindings`) and the running game reloads it
 (`HostControls::reload_bindings`). No Apply, as in RecompFrontend. Bindings are per device type, not
-per player: every controller uses the controller profile. The menu keys (Escape / Select) are fixed.
-The engine's own binding screen is no longer reachable from F1 (the HUD editor took the key);
-the Controls tab covers everything it did.
+per player: every controller uses the controller profile; wheel/pedals use the joystick profile.
+The menu keys (Escape / Select) are fixed. The engine's own binding screen is no longer reachable
+from F1 (the HUD editor took the key); the Controls tab covers keyboard, controller, and wheel.
 
 ### Input
 

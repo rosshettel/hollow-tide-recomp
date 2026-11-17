@@ -177,6 +177,7 @@ std::string binding_glyph(const dream::render::Binding& b) {
             if (n == a.name)
                 return utf8(pos ? a.plus : a.minus);
     }
+    // JoyAxis / JoyButton: show the text label (WHEEL:0 +) — PromptFont has no wheel glyphs.
     return {};
 }
 
@@ -351,6 +352,7 @@ bool MenuUi::load(Rml::Context* ctx, std::string* error) {
     if (mode_ == Mode::Pregame)
         start_verify(false);
     refresh_pads();
+    refresh_joysticks();
     dirty_ = true;
     return true;
 }
@@ -679,6 +681,7 @@ std::string MenuUi::tab_controls() {
 }
 
 std::string MenuUi::controls_cards() {
+    refresh_joysticks();
     const unsigned players =
         std::clamp(cfg_.port ? cfg_.port->players : 4u, 1u, 4u);
     std::string s = "<div id=\"ccards\">";
@@ -698,35 +701,91 @@ std::string MenuUi::controls_cards() {
              (usable ? "ctl-edit:" + std::to_string(p) : std::string()) +
              "\">Edit Profile</div></div>";
     }
+    // Wheel / pedals: one shared profile (raw joysticks), always editable — assign devices inside.
+    {
+        std::string names;
+        for (std::size_t i = 0; i < joys_.size(); ++i) {
+            if (i)
+                names += ", ";
+            names += joys_[i].name;
+        }
+        if (names.empty())
+            names = "None plugged in";
+        s += "<div class=\"ccard-wrap\"><div class=\"ccard-label\">Wheel / pedals</div>"
+             "<div class=\"ccard\"><div class=\"cicon\">W</div><div class=\"cdev\">Joystick "
+             "profile</div><div class=\"cdev2\">" +
+             esc(names) +
+             "</div></div><div id=\"c-edit-joy\" class=\"button secondary focusable\" "
+             "act=\"ctl-edit-joy\">Edit Profile</div></div>";
+    }
     s += "</div><div class=\"cnote\">Controllers play in the order they are connected; the "
-         "keyboard plays as player 1. Every controller uses the controller profile.</div>";
+         "keyboard plays as player 1. Every controller uses the controller profile. Wheel, pedals "
+         "and an optional handbrake use the joystick profile (raw axes, not the gamepad API).</div>";
+    return s;
+}
+
+std::string MenuUi::controls_role_rows() {
+    refresh_joysticks();
+    std::string s;
+    for (unsigned r = 0; r < dream::render::kJoyRoleCount; ++r) {
+        const auto role = static_cast<dream::render::JoyRole>(r);
+        const std::string id = std::string("c-role-") + dream::render::joy_role_key(role);
+        descs_[id] = {dream::render::joy_role_label(role),
+                      "Which physical device fills this role. Click (or Enter) to cycle through "
+                      "plugged-in joysticks. Assign the wheel, pedals and optional handbrake "
+                      "before binding axes.<br/><br/>Hydro Thunder: wheel → stick, gas → R "
+                      "trigger, brake → L trigger, clutch → A (boost); A's second box can be a "
+                      "handbrake for boost.",
+                      true};
+        s += "<div id=\"" + id + "\" class=\"crow\"><div class=\"clabel\">" +
+             esc(dream::render::joy_role_label(role)) +
+             "</div><div class=\"cslots\"><div id=\"s-role-" + std::to_string(r) +
+             "\" class=\"cslot focusable wide\" act=\"ctl-role:" + std::to_string(r) +
+             "\"><span class=\"btext\">" + esc(role_device_label(role)) +
+             "</span></div></div></div>";
+    }
     return s;
 }
 
 std::string MenuUi::controls_mappings() {
+    if (ctl_device_ == 2)
+        refresh_joysticks();
     const bool kb = ctl_device_ == 0;
+    const bool joy = ctl_device_ == 2;
+    const char* profile = kb ? "Keyboard profile" : joy ? "Joystick profile" : "Controller profile";
     std::string s = "<div class=\"chead\">";
-    if (capture_.active)
-        s += std::string("<div class=\"ctitle rec\">") +
-             (kb ? "Press a key for " : "Press a button or move a stick for ") +
-             ctl_label(capture_.control) + "</div><div class=\"pspacer\"></div><div "
-             "class=\"chint\">" + (kb ? "Esc cancels" : "Select or Esc cancels") + "</div>";
-    else
-        s += std::string("<div class=\"ctitle\">Editing: ") +
-             (kb ? "Keyboard profile" : "Controller profile") +
+    if (capture_.active) {
+        const char* wait =
+            kb ? "Press a key for "
+            : joy ? "Turn the wheel or press a pedal/button for "
+                  : "Press a button or move a stick for ";
+        s += std::string("<div class=\"ctitle rec\">") + wait + ctl_label(capture_.control) +
+             "</div><div class=\"pspacer\"></div><div class=\"chint\">" +
+             (kb ? "Esc cancels" : "Select or Esc cancels") + "</div>";
+    } else
+        s += std::string("<div class=\"ctitle\">Editing: ") + profile +
              "</div><div class=\"pspacer\"></div><div id=\"c-back\" class=\"button "
              "focusable\" act=\"ctl-back\">Go back</div>";
     s += "</div>";
+    if (joy && !capture_.active)
+        s += controls_role_rows();
     const auto& dev = editing();
     const std::string how =
         kb ? "Click a box, or press Enter on it, then press the key to use. Escape cancels."
-           : "Click a box, or press " + glyph(kGlyphA) +
-                 " on it, then press the button or move the stick to use. Select or Escape "
-                 "cancels.";
-    const std::string who = kb ? "The keyboard plays as player 1, together with the first "
-                                 "controller."
-                               : "Every controller uses this profile; controller 1 plays as "
-                                 "player 1, controller 2 as player 2.";
+        : joy
+            ? "Assign WHEEL / PEDALS / HANDBRAKE above first. Click a box, then turn the wheel or "
+              "press the pedal or button. Pedals bind as full-range axes; the wheel binds left and "
+              "right halves. Select or Escape cancels."
+            : "Click a box, or press " + glyph(kGlyphA) +
+                  " on it, then press the button or move the stick to use. Select or Escape "
+                  "cancels.";
+    const std::string who =
+        kb ? "The keyboard plays as player 1, together with the first controller."
+        : joy ? "The joystick profile is always live with keyboard and controller. Use Analog "
+                "Left/Right for steer, R/L Trigger for gas/brake, A for boost (second box for a "
+                "handbrake)."
+              : "Every controller uses this profile; controller 1 plays as player 1, controller 2 "
+                "as player 2.";
     for (const auto& r : kCtlRows) {
         const unsigned i = static_cast<unsigned>(r.c);
         const std::string key = id_safe(dream::render::pad_control_key(r.c));
@@ -761,25 +820,70 @@ std::string MenuUi::controls_mappings() {
 
 std::string MenuUi::controls_footer() {
     const bool kb = ctl_device_ == 0;
-    descs_["c-dev"] = {"Controller / keyboard",
-                       "Which profile you are editing. Both are live at once: the keyboard "
-                       "still works with a controller plugged in.",
+    const bool pad = ctl_device_ == 1;
+    const bool joy = ctl_device_ == 2;
+    descs_["c-dev"] = {"Controller / keyboard / wheel",
+                       "Which profile you are editing. All three are live at once: keyboard, "
+                       "controller, and joystick (wheel/pedals).",
                        true};
     descs_["c-reset"] = {"Reset to defaults",
                          std::string("Puts every binding in the ") +
-                             (kb ? "keyboard" : "controller") +
-                             " profile back to the original layout.",
+                             (kb ? "keyboard" : joy ? "joystick" : "controller") +
+                             " profile back to the original layout" +
+                             (joy ? " and clears wheel/pedals/handbrake device assignments." : "."),
                          true};
     return std::string("<div id=\"c-dev\" class=\"ctoggle focusable\" act=\"ctl-device\"><span "
                        "class=\"tg") +
-           (kb ? "" : " on") + "\">" + utf8(kDeviceGamepad) + "</span><span class=\"tg" +
-           (kb ? " on" : "") + "\">" + utf8(kDeviceKeyboard) +
-           "</span></div><div id=\"c-reset\" class=\"button warning focusable\" "
-           "act=\"ctl-reset\">Reset to defaults</div>";
+           (pad ? " on" : "") + "\">" + utf8(kDeviceGamepad) + "</span><span class=\"tg" +
+           (kb ? " on" : "") + "\">" + utf8(kDeviceKeyboard) + "</span><span class=\"tg" +
+           (joy ? " on" : "") + "\">W</span></div><div id=\"c-reset\" class=\"button warning "
+                                "focusable\" act=\"ctl-reset\">Reset to defaults</div>";
 }
 
 dream::render::DeviceBindings& MenuUi::editing() {
-    return ctl_device_ == 0 ? bindings_.keyboard : bindings_.gamepad;
+    if (ctl_device_ == 1)
+        return bindings_.gamepad;
+    if (ctl_device_ == 2)
+        return bindings_.joystick;
+    return bindings_.keyboard;
+}
+
+std::string MenuUi::role_device_label(dream::render::JoyRole role) const {
+    const std::string& guid = bindings_.joy_guid[static_cast<unsigned>(role)];
+    if (guid.empty())
+        return "--";
+    for (const auto& j : joys_) {
+        if (j.guid == guid)
+            return j.name.empty() ? guid : j.name;
+    }
+    return guid.size() > 8 ? guid.substr(0, 8) + "…" : guid;
+}
+
+void MenuUi::cycle_joy_role(dream::render::JoyRole role, int delta) {
+    refresh_joysticks();
+    const int n = static_cast<int>(joys_.size()) + 1;  // 0 = unassigned
+    int idx = 0;
+    const std::string& cur = bindings_.joy_guid[static_cast<unsigned>(role)];
+    if (!cur.empty()) {
+        for (int i = 0; i < static_cast<int>(joys_.size()); ++i) {
+            if (joys_[static_cast<std::size_t>(i)].guid == cur) {
+                idx = i + 1;
+                break;
+            }
+        }
+    }
+    idx = (idx + delta % n + n) % n;
+    bindings_.joy_guid[static_cast<unsigned>(role)] =
+        idx == 0 ? std::string() : joys_[static_cast<std::size_t>(idx - 1)].guid;
+    save_bindings();
+    dirty_ = true;
+}
+
+std::string MenuUi::guid_for_instance(std::uint32_t instance_id) const {
+    const SDL_GUID g = SDL_GetJoystickGUIDForID(static_cast<SDL_JoystickID>(instance_id));
+    char buf[64]{};
+    SDL_GUIDToString(g, buf, static_cast<int>(sizeof buf));
+    return buf;
 }
 
 void MenuUi::load_bindings() {
@@ -824,17 +928,28 @@ void MenuUi::finish_capture(const dream::render::Binding* b) {
         std::printf("controls: capture cancelled\n");
         return;
     }
-    editing().slot(static_cast<dream::render::PadControl>(control), slot) = *b;
-    std::printf("controls: %s %s slot %u = %s\n", ctl_device_ == 0 ? "keyboard" : "controller",
-                ctl_label(control), slot + 1, b->text().c_str());
+    auto& d = editing();
+    // One physical input → one control (same as the engine binding screen).
+    for (unsigned i = 0; i < dream::render::kPadControlCount; ++i) {
+        if (d.b[i] == *b)
+            d.b[i] = dream::render::Binding{};
+        if (d.alt[i] == *b)
+            d.alt[i] = dream::render::Binding{};
+    }
+    d.slot(static_cast<dream::render::PadControl>(control), slot) = *b;
+    const char* who = ctl_device_ == 0 ? "keyboard" : ctl_device_ == 2 ? "joystick" : "controller";
+    std::printf("controls: %s %s slot %u = %s\n", who, ctl_label(control), slot + 1,
+                b->text().c_str());
     save_bindings();
 }
 
-// While a slot waits for input: the next key (keyboard profile) or button / stick direction
-// (controller profile) becomes the binding. Escape, or a pad's Select, cancels. True: consumed.
+// While a slot waits for input: the next key (keyboard), button/stick (controller), or raw
+// joystick axis/button (wheel profile) becomes the binding. Escape, or a pad's Select, cancels.
 bool MenuUi::capture_event(const SDL_Event& ev) {
     using dream::render::BindSource;
+    using dream::render::JoyRole;
     const bool kb = ctl_device_ == 0;
+    const bool joy = ctl_device_ == 2;
     switch (ev.type) {
     case SDL_EVENT_KEY_DOWN: {
         if (ev.key.repeat)
@@ -857,7 +972,7 @@ bool MenuUi::capture_event(const SDL_Event& ev) {
             finish_capture(nullptr);
             return true;
         }
-        if (kb)
+        if (kb || joy)
             return true;
         const char* n =
             SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(ev.gbutton.button));
@@ -868,7 +983,7 @@ bool MenuUi::capture_event(const SDL_Event& ev) {
         return true;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
-        if (kb || std::abs(static_cast<int>(ev.gaxis.value)) < 16384)
+        if (kb || joy || std::abs(static_cast<int>(ev.gaxis.value)) < 16384)
             return true;
         const char* n = SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(ev.gaxis.axis));
         if (!n || !*n)
@@ -877,9 +992,61 @@ bool MenuUi::capture_event(const SDL_Event& ev) {
         finish_capture(&b);
         return true;
     }
+    case SDL_EVENT_JOYSTICK_BUTTON_DOWN: {
+        if (!joy)
+            return true;
+        const std::string guid = guid_for_instance(ev.jbutton.which);
+        JoyRole role = JoyRole::Count;
+        for (unsigned r = 0; r < dream::render::kJoyRoleCount; ++r) {
+            if (bindings_.joy_guid[r] == guid) {
+                role = static_cast<JoyRole>(r);
+                break;
+            }
+        }
+        if (role == JoyRole::Count) {
+            toast_ = "Assign this device as WHEEL / PEDALS / HANDBRAKE first";
+            toast_until_ = SDL_GetTicks() + 2500;
+            finish_capture(nullptr);
+            return true;
+        }
+        const dream::render::Binding b{
+            BindSource::JoyButton,
+            std::string(dream::render::joy_role_key(role)) + ":" +
+                std::to_string(ev.jbutton.button),
+            1};
+        finish_capture(&b);
+        return true;
+    }
+    case SDL_EVENT_JOYSTICK_AXIS_MOTION: {
+        if (!joy || std::abs(static_cast<int>(ev.jaxis.value)) < 20000)
+            return true;
+        const std::string guid = guid_for_instance(ev.jaxis.which);
+        JoyRole role = JoyRole::Count;
+        for (unsigned r = 0; r < dream::render::kJoyRoleCount; ++r) {
+            if (bindings_.joy_guid[r] == guid) {
+                role = static_cast<JoyRole>(r);
+                break;
+            }
+        }
+        if (role == JoyRole::Count) {
+            toast_ = "Assign this device as WHEEL / PEDALS / HANDBRAKE first";
+            toast_until_ = SDL_GetTicks() + 2500;
+            finish_capture(nullptr);
+            return true;
+        }
+        const std::string code = std::string(dream::render::joy_role_key(role)) + ":" +
+                                 std::to_string(ev.jaxis.axis);
+        // Wheel: centred half-axis. Pedals / handbrake: full-range (rest at the low end).
+        const dream::render::Binding b{
+            BindSource::JoyAxis, code,
+            role == JoyRole::Wheel ? (ev.jaxis.value < 0 ? -1 : 1) : 0};
+        finish_capture(&b);
+        return true;
+    }
     case SDL_EVENT_KEY_UP:
     case SDL_EVENT_TEXT_INPUT:
     case SDL_EVENT_GAMEPAD_BUTTON_UP:
+    case SDL_EVENT_JOYSTICK_BUTTON_UP:
         return true;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
         // A click elsewhere cancels; on another box it then starts that one.
@@ -1335,12 +1502,25 @@ void MenuUi::run_act(const std::string& act, Rml::Event* ev) {
         ctl_device_ = p < pads_.size() ? 1 : 0;
         want_focus_ = "s-" + id_safe(dream::render::pad_control_key(kCtlRows[0].c)) + "-0";
         dirty_ = true;
+    } else if (kind == "ctl-edit-joy") {
+        ctl_view_ = 1;
+        ctl_device_ = 2;
+        refresh_joysticks();
+        want_focus_ = "s-role-0";
+        dirty_ = true;
     } else if (kind == "ctl-back") {
         back();
     } else if (kind == "ctl-device") {
-        ctl_device_ = 1 - ctl_device_;
+        // Cycle keyboard → controller → joystick → keyboard.
+        ctl_device_ = (ctl_device_ + 1) % 3;
         capture_.active = false;
         want_focus_ = "c-dev";
+        dirty_ = true;
+    } else if (kind == "ctl-role") {
+        const unsigned r = static_cast<unsigned>(std::atoi(arg.c_str()));
+        if (r < dream::render::kJoyRoleCount)
+            cycle_joy_role(static_cast<dream::render::JoyRole>(r), 1);
+        want_focus_ = "s-role-" + std::to_string(r);
         dirty_ = true;
     } else if (kind == "bind") {
         const auto c2 = arg.find(':');
@@ -1359,7 +1539,14 @@ void MenuUi::run_act(const std::string& act, Rml::Event* ev) {
         dirty_ = true;
     } else if (kind == "ctl-reset") {
         const auto d = dream::render::Bindings::defaults();
-        editing() = ctl_device_ == 0 ? d.keyboard : d.gamepad;
+        if (ctl_device_ == 0)
+            editing() = d.keyboard;
+        else if (ctl_device_ == 1)
+            editing() = d.gamepad;
+        else {
+            editing() = d.joystick;
+            bindings_.joy_guid = d.joy_guid;
+        }
         save_bindings();
         dirty_ = true;
     } else if (kind == "rebind") {
@@ -1551,6 +1738,28 @@ void MenuUi::refresh_pads() {
     set_pads(std::move(names));
 }
 
+void MenuUi::refresh_joysticks() {
+    std::vector<JoyChoice> next;
+    int count = 0;
+    if (SDL_JoystickID* ids = SDL_GetJoysticks(&count)) {
+        for (int i = 0; i < count; ++i) {
+            // Wheels and pedal boxes are usually not gamepads; skip sticks already claimed as pads.
+            if (SDL_IsGamepad(ids[i]))
+                continue;
+            JoyChoice j;
+            j.guid = guid_for_instance(ids[i]);
+            const char* n = SDL_GetJoystickNameForID(ids[i]);
+            j.name = n && *n ? n : "Joystick";
+            next.push_back(std::move(j));
+        }
+        SDL_free(ids);
+    }
+    if (next != joys_) {
+        joys_ = std::move(next);
+        dirty_ = true;
+    }
+}
+
 void MenuUi::set_pads(std::vector<std::string> names) {
     pads_ = std::move(names);
     dirty_ = true;
@@ -1624,6 +1833,10 @@ bool MenuUi::handle(const SDL_Event& ev, const MouseMap& map) {
     case SDL_EVENT_GAMEPAD_REMOVED:
         refresh_pads();
         return false;  // the window keeps its own device list too
+    case SDL_EVENT_JOYSTICK_ADDED:
+    case SDL_EVENT_JOYSTICK_REMOVED:
+        refresh_joysticks();
+        return false;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
         switch (ev.gbutton.button) {
         case SDL_GAMEPAD_BUTTON_DPAD_UP: pad_dir(Rml::Input::KI_UP); break;

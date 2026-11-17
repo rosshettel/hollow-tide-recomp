@@ -76,7 +76,8 @@ public:
             return false;
         }
         video_ = true;
-        if (SDL_InitSubSystem(SDL_INIT_GAMEPAD))
+        // Joystick too: wheels and pedal boxes are raw joysticks, not gamepads (Controls tab).
+        if (SDL_InitSubSystem(SDL_INIT_GAMEPAD | SDL_INIT_JOYSTICK))
             gamepad_ = true;
         const char* t = ctx_.port && ctx_.port->title ? ctx_.port->title : "dreamcomp";
         SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
