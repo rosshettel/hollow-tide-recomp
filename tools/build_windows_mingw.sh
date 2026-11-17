@@ -69,6 +69,16 @@ rm -rf "$dist"
 mkdir -p "$dist"
 cp "$exe" "$dist/hydro-thunder.exe"
 cp "$sdl_root/bin/SDL3.dll" "$dist/"
+# MinGW runtime (the three "DLL was not found" errors without these).
+mingw_root="$(dirname "$(dirname "$(command -v x86_64-w64-mingw32-g++)")")/x86_64-w64-mingw32"
+for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+  src=""
+  for cand in "$mingw_root/bin/$dll" "$mingw_root/lib/$dll"; do
+    [[ -f "$cand" ]] && src=$cand && break
+  done
+  [[ -n "$src" ]] || { echo "missing MinGW runtime $dll under $mingw_root" >&2; exit 1; }
+  cp "$src" "$dist/"
+done
 # Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
 # would shadow the GPU vendor's loader (what a 4070 Ti already has in System32).
 cp "$root/game/hydrothunder.toml" "$dist/"
@@ -88,7 +98,8 @@ Hydro Thunder (Dreamcast) — portable Windows build
 
 What to copy
 ------------
-Copy this entire folder to a USB stick (or anywhere on the Windows PC).
+Copy this entire folder to a USB stick (or anywhere on the Windows PC),
+including the three lib*.dll files next to the exe (MinGW runtime).
 You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
 Do not redistribute the disc image.
 

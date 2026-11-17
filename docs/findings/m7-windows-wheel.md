@@ -15,6 +15,9 @@ dist/windows/
   Play Hydro Thunder.bat   # double-click this
   hydro-thunder.exe        # launcher built in (disc picker)
   SDL3.dll
+  libgcc_s_seh-1.dll       # MinGW runtime (required)
+  libstdc++-6.dll
+  libwinpthread-1.dll
   hydrothunder.toml
   frontend/                # launcher UI + fonts
   README.txt
