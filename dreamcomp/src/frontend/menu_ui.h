@@ -19,6 +19,7 @@
 #include <future>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "dream/render/input.h"
@@ -26,6 +27,7 @@
 #include "launcher_model.h"
 
 union SDL_Event;
+struct SDL_Joystick;
 
 namespace dreamcomp {
 class Settings;
@@ -204,9 +206,21 @@ private:
     struct JoyChoice {
         std::string guid;
         std::string name;
-        bool operator==(const JoyChoice&) const = default;
+        std::uint32_t instance_id = 0;
+        bool operator==(const JoyChoice& o) const {
+            return guid == o.guid && name == o.name && instance_id == o.instance_id;
+        }
     };
     std::vector<JoyChoice> joys_;
+    // Open handles — SDL only delivers JOYSTICK_* events for opened devices.
+    struct OpenJoy {
+        std::uint32_t instance_id = 0;
+        std::string guid;
+        SDL_Joystick* joy = nullptr;
+    };
+    std::vector<OpenJoy> open_joys_;
+    void close_open_joys();
+    void poll_capture_joysticks();  // axis/button sample while capturing (events alone miss some HW)
     dream::render::Bindings bindings_;
     bool bindings_loaded_ = false;
     int ctl_view_ = 0;    // 0 player cards, 1 mappings
@@ -214,6 +228,14 @@ private:
     struct Capture {
         bool active = false;
         unsigned control = 0, slot = 0;
+        // Axis baselines at capture start so a resting pedal/wheel does not bind immediately.
+        struct AxisBase {
+            std::uint32_t instance_id = 0;
+            int axis = 0;
+            int value = 0;
+        };
+        std::vector<AxisBase> axis_base;
+        std::vector<std::pair<std::uint32_t, int>> buttons_held;  // ignore until released
     } capture_;
     Rml::Input::KeyIdentifier held_ = Rml::Input::KI_UNKNOWN;
     std::uint64_t repeat_at_ = 0;

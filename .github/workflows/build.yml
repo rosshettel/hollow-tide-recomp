@@ -114,6 +114,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$SDL3_ROOT" \
             -DDREAM_BUILD_TESTS=OFF \
             -DDREAMCOMP_FRONTEND=ON \
+            -DDREAM_DXGI=ON \
             -DDREAM_WERROR=OFF
 
       - name: Build

@@ -326,29 +326,28 @@ public:
         }
         if (g_settings.get_bool("fullscreen", false) && !has_flag(args, "--fullscreen"))
             args.push_back("--fullscreen");
-        // Frame rate (docs/INTERPOLATION.md): auto blends a frame between game frames on displays
-        // of 120 Hz or more; 120 forces it; 60 is the game's own rate only.
+#if defined(_WIN32)
+        // Windows: DXGI flip-model by default (Vulkan windowed often tears on NVIDIA). Keep
+        // guest-rate frames (fps=60) — high-Hz interpolation has looked like flashing sprites.
+        const char* latency_default = "low";
+        const char* fps_default = "60";
+#else
+        const char* latency_default = "standard";
+        const char* fps_default = "auto";
+#endif
+        // Frame rate (docs/INTERPOLATION.md): auto blends on ≥120 Hz; 120 forces it; 60 is guest only.
         if (!has_flag(args, "--interpolate") && !has_flag(args, "--interpolate-auto")) {
-            const std::string fps = g_settings.get("fps", "auto");
+            const std::string fps = g_settings.get("fps", fps_default);
             if (fps == "auto")
                 args.push_back("--interpolate-auto");
             else if (fps == "120")
                 args.push_back("--interpolate");
         }
-        // Frame timing (docs/PACING.md): "display" (default) paces the game at the display's
-        // rate when it is within 0.5 % of the game's, so a 60 Hz panel never repeats a frame;
+        // Frame timing (docs/PACING.md): "display" (default) paces at the panel rate near 59.94 Hz;
         // "exact" keeps the Dreamcast's 59.94 Hz.
         if (g_settings.get("frame_timing", "display") != "exact" && !has_flag(args, "--sync-display"))
             args.push_back("--sync-display");
-        // Latency (docs/PACING.md): "low" presents through DXGI flip-model on Windows (vsync without
-        // the tearing some NVIDIA Vulkan swapchains show in a bordered window); "standard" through
-        // the Vulkan swapchain. Default to low on Windows — a 4070 Ti / flip-model path — and keep
-        // standard elsewhere (and as an explicit Settings choice if DXGI misbehaves on Intel).
-#if defined(_WIN32)
-        const char* latency_default = "low";
-#else
-        const char* latency_default = "standard";
-#endif
+        // Latency (docs/PACING.md): "low" → DXGI on Windows; "standard" → Vulkan swapchain.
         if (g_settings.get("latency", latency_default) == "low" &&
             !has_flag(args, "--present-path")) {
             args.push_back("--present-path");

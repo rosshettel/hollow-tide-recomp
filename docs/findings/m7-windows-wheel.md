@@ -34,15 +34,18 @@ Disc path persists in `%APPDATA%\dreamcomp\hydrothunder\settings.ini`.
 Prefer the GitHub Actions `beta` Windows zip (clang-cl) over the Mac mingw
 cross build. Rebuild locally: `./tools/build_windows_mingw.sh` (fallback only).
 
-### Playtest fixes (bindings path + tearing)
+### Playtest fixes (bindings path, capture, tearing)
 
 - Controls must save to `%APPDATA%\dreamcomp\hydrothunder\bindings.txt` — the same
-  file `--bindings` loads. An earlier bug wrote the launcher Controls tab to
-  `%APPDATA%\dream-recomp\dream-recomp\bindings.txt`, so the wheel looked fine in
-  the UI and did nothing in-game (keyboard still worked).
-- Windows defaults to DXGI flip-model present (`latency = low`) for vsync without
-  the tearing some NVIDIA Vulkan windowed swapchains show. Settings → Latency →
-  Standard switches back to the Vulkan swapchain.
+  file `--bindings` loads.
+- Capture opens every joystick (SDL only emits axis/button events for opened
+  devices) and also polls axes while recording. Wheel profile rows are labeled
+  Steering / Gas / Brake / Boost (not Analog X/Y).
+- `DREAM_DXGI=ON` in the Windows CI/portable build — earlier `latency=low` asked
+  for DXGI but the presenter was not compiled in, so Vulkan tearing remained.
+  Windows defaults: Latency Low (DXGI), Frame rate 60 (no high-Hz interpolation).
+  If an old `settings.ini` still says otherwise, set those in Graphics or delete
+  the file.
 
 ## Keyboard defaults
 

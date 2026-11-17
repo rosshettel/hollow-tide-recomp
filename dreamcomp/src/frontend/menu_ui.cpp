@@ -204,11 +204,32 @@ constexpr CtlRow kCtlRows[] = {
     {dream::render::PadControl::Right, "D-Pad Right"},
 };
 
+// Wheel / pedals profile: Hydro Thunder names, not Dreamcast face-button letters.
+constexpr CtlRow kJoyCtlRows[] = {
+    {dream::render::PadControl::StickLeft, "Steering Left"},
+    {dream::render::PadControl::StickRight, "Steering Right"},
+    {dream::render::PadControl::RightTrigger, "Gas"},
+    {dream::render::PadControl::LeftTrigger, "Brake"},
+    {dream::render::PadControl::A, "Boost"},
+};
+
 const char* ctl_label(unsigned control) {
+    for (const auto& r : kJoyCtlRows)
+        if (static_cast<unsigned>(r.c) == control)
+            return r.label;
     for (const auto& r : kCtlRows)
         if (static_cast<unsigned>(r.c) == control)
             return r.label;
     return "";
+}
+
+const CtlRow* ctl_rows_for(bool joy, std::size_t& count) {
+    if (joy) {
+        count = sizeof(kJoyCtlRows) / sizeof(kJoyCtlRows[0]);
+        return kJoyCtlRows;
+    }
+    count = sizeof(kCtlRows) / sizeof(kCtlRows[0]);
+    return kCtlRows;
 }
 
 std::string glyph(const char* g) { return std::string("<span class=\"glyph\">") + g + "</span>"; }
@@ -297,6 +318,7 @@ MenuUi::MenuUi(const UiConfig& cfg, Mode mode, UiHost host)
 MenuUi::~MenuUi() {
     if (verifying_ && verify_.valid())
         verify_.wait();
+    close_open_joys();
     // The document outlives this listener (RmlUi frees it at Shutdown): detach first.
     if (doc_) {
         doc_->RemoveEventListener(Rml::EventId::Click, this);
@@ -655,8 +677,13 @@ std::string MenuUi::tab_general() {
                     "How strongly controllers with motors vibrate when the game asks for it. 0 % "
                     "turns rumble off.",
                     true);
+#if defined(_WIN32)
+    const char* fps_default = "60";
+#else
+    const char* fps_default = "auto";
+#endif
     s += row_radio("fps", "Frame rate", {{"auto", "Auto"}, {"120", "120"}, {"60", "60"}},
-                   draft_.get("fps", "auto"),
+                   draft_.get("fps", fps_default),
                    "<b>Auto</b> blends an in-between frame between the game's frames on displays "
                    "of 120 Hz or more.<br/><b>120</b>: always blend.<br/><b>60</b>: only the "
                    "game's own frames.<br/><br/>The game itself always runs at 60.",
@@ -781,12 +808,14 @@ std::string MenuUi::controls_mappings() {
                   "cancels.";
     const std::string who =
         kb ? "The keyboard plays as player 1, together with the first controller."
-        : joy ? "The joystick profile is always live with keyboard and controller. Use Analog "
-                "Left/Right for steer, R/L Trigger for gas/brake, A for boost (second box for a "
-                "handbrake)."
+        : joy ? "The joystick profile is always live with keyboard and controller. Steering "
+                "Left/Right, Gas, Brake, Boost (Boost's second box can be a handbrake)."
               : "Every controller uses this profile; controller 1 plays as player 1, controller 2 "
                 "as player 2.";
-    for (const auto& r : kCtlRows) {
+    std::size_t nrow = 0;
+    const CtlRow* rows = ctl_rows_for(joy, nrow);
+    for (std::size_t ri = 0; ri < nrow; ++ri) {
+        const auto& r = rows[ri];
         const unsigned i = static_cast<unsigned>(r.c);
         const std::string key = id_safe(dream::render::pad_control_key(r.c));
         const std::string row = "b-" + key;
@@ -1034,7 +1063,8 @@ bool MenuUi::capture_event(const SDL_Event& ev) {
         return true;
     }
     case SDL_EVENT_JOYSTICK_AXIS_MOTION: {
-        if (!joy || std::abs(static_cast<int>(ev.jaxis.value)) < 20000)
+        // Match poll_capture_joysticks delta; 20000 was too stiff for some pedal boxes.
+        if (!joy || std::abs(static_cast<int>(ev.jaxis.value)) < 12000)
             return true;
         const std::string guid = guid_for_instance(ev.jaxis.which);
         JoyRole role = JoyRole::Count;
@@ -1545,11 +1575,26 @@ void MenuUi::run_act(const std::string& act, Rml::Event* ev) {
         dirty_ = true;
     } else if (kind == "bind") {
         const auto c2 = arg.find(':');
+        refresh_joysticks();
         capture_.active = true;
         capture_.control = static_cast<unsigned>(std::atoi(arg.substr(0, c2).c_str()));
         capture_.slot = c2 == std::string::npos
                             ? 0u
                             : std::min(1u, static_cast<unsigned>(std::atoi(arg.c_str() + c2 + 1)));
+        capture_.axis_base.clear();
+        capture_.buttons_held.clear();
+        for (OpenJoy& oj : open_joys_) {
+            if (!oj.joy)
+                continue;
+            const int naxis = SDL_GetNumJoystickAxes(oj.joy);
+            for (int a = 0; a < naxis; ++a)
+                capture_.axis_base.push_back(
+                    {oj.instance_id, a, static_cast<int>(SDL_GetJoystickAxis(oj.joy, a))});
+            const int nbtn = SDL_GetNumJoystickButtons(oj.joy);
+            for (int b = 0; b < nbtn; ++b)
+                if (SDL_GetJoystickButton(oj.joy, b))
+                    capture_.buttons_held.emplace_back(oj.instance_id, b);
+        }
         want_focus_ = focus_id();
         dirty_ = true;
     } else if (kind == "ctl-clear") {
@@ -1759,24 +1804,112 @@ void MenuUi::refresh_pads() {
     set_pads(std::move(names));
 }
 
+void MenuUi::close_open_joys() {
+    for (OpenJoy& j : open_joys_)
+        if (j.joy)
+            SDL_CloseJoystick(j.joy);
+    open_joys_.clear();
+}
+
 void MenuUi::refresh_joysticks() {
     std::vector<JoyChoice> next;
+    std::vector<OpenJoy> opened;
     int count = 0;
     if (SDL_JoystickID* ids = SDL_GetJoysticks(&count)) {
         for (int i = 0; i < count; ++i) {
             // List every stick, including ones SDL also maps as gamepads: some wheels ship with a
             // gamepad mapping and would otherwise be invisible to the Wheel / pedals profile.
+            // Open each one — SDL only delivers JOYSTICK_* events for opened devices.
+            SDL_Joystick* joy = SDL_OpenJoystick(ids[i]);
+            if (!joy)
+                continue;
             JoyChoice j;
+            j.instance_id = static_cast<std::uint32_t>(ids[i]);
             j.guid = guid_for_instance(ids[i]);
-            const char* n = SDL_GetJoystickNameForID(ids[i]);
+            const char* n = SDL_GetJoystickName(joy);
             j.name = n && *n ? n : "Joystick";
+            opened.push_back(OpenJoy{j.instance_id, j.guid, joy});
             next.push_back(std::move(j));
         }
         SDL_free(ids);
     }
+    // Swap open handles after the new set is ready so a no-op refresh does not flicker closes.
     if (next != joys_) {
+        close_open_joys();
+        open_joys_ = std::move(opened);
         joys_ = std::move(next);
         dirty_ = true;
+    } else {
+        for (OpenJoy& j : opened)
+            if (j.joy)
+                SDL_CloseJoystick(j.joy);
+    }
+}
+
+void MenuUi::poll_capture_joysticks() {
+    if (!capture_.active || ctl_device_ != 2)
+        return;
+    using dream::render::BindSource;
+    using dream::render::JoyRole;
+    constexpr int kDelta = 12000;
+    auto role_for = [&](const std::string& guid) -> JoyRole {
+        for (unsigned r = 0; r < dream::render::kJoyRoleCount; ++r)
+            if (bindings_.joy_guid[r] == guid)
+                return static_cast<JoyRole>(r);
+        return JoyRole::Count;
+    };
+    auto button_was_held = [&](std::uint32_t id, int btn) {
+        for (const auto& p : capture_.buttons_held)
+            if (p.first == id && p.second == btn)
+                return true;
+        return false;
+    };
+    auto baseline = [&](std::uint32_t id, int axis) -> int {
+        for (const auto& b : capture_.axis_base)
+            if (b.instance_id == id && b.axis == axis)
+                return b.value;
+        return 0;
+    };
+    for (OpenJoy& oj : open_joys_) {
+        if (!oj.joy)
+            continue;
+        const JoyRole role = role_for(oj.guid);
+        if (role == JoyRole::Count)
+            continue;
+        const int nbtn = SDL_GetNumJoystickButtons(oj.joy);
+        for (int b = 0; b < nbtn; ++b) {
+            const bool down = SDL_GetJoystickButton(oj.joy, b);
+            if (!down) {
+                // Clear "held at start" once released so a later press can bind.
+                capture_.buttons_held.erase(
+                    std::remove_if(capture_.buttons_held.begin(), capture_.buttons_held.end(),
+                                   [&](const auto& p) {
+                                       return p.first == oj.instance_id && p.second == b;
+                                   }),
+                    capture_.buttons_held.end());
+                continue;
+            }
+            if (button_was_held(oj.instance_id, b))
+                continue;
+            const dream::render::Binding bind{
+                BindSource::JoyButton,
+                std::string(dream::render::joy_role_key(role)) + ":" + std::to_string(b), 1};
+            finish_capture(&bind);
+            return;
+        }
+        const int naxis = SDL_GetNumJoystickAxes(oj.joy);
+        for (int a = 0; a < naxis; ++a) {
+            const int v = SDL_GetJoystickAxis(oj.joy, a);
+            if (std::abs(v - baseline(oj.instance_id, a)) < kDelta)
+                continue;
+            const std::string code =
+                std::string(dream::render::joy_role_key(role)) + ":" + std::to_string(a);
+            const dream::render::Binding bind{
+                BindSource::JoyAxis, code,
+                role == JoyRole::Wheel ? (v < 0 ? -1 : 1) : 0};
+            finish_capture(&bind);
+            return;
+        }
     }
 }
 
@@ -1920,6 +2053,10 @@ void MenuUi::tick() {
         toast_.clear();
         dirty_ = true;
     }
+    // While capturing a wheel/pedal binding, sample opened joysticks every frame — some devices
+    // never emit AXIS_MOTION events until opened, and some only update via GetJoystickAxis.
+    if (capture_.active && ctl_device_ == 2)
+        poll_capture_joysticks();
     if (dirty_)
         rebuild();
 }

@@ -15,6 +15,11 @@ enable_testing()
 set(HT_IMAGE ${CMAKE_CURRENT_SOURCE_DIR}/game/extracted/fs/1ST_READ.BIN)
 set(DREAM_SH4_EXTRA_SLICES ${CMAKE_CURRENT_SOURCE_DIR}/game/slice.cmake)
 set(DREAM_SH4_EXTRA_GOLDEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/game/extracted/golden)
+# Windows portable builds need the DXGI flip-model presenter — otherwise `--present-path dxgi`
+# (latency=low) prints "not built into this binary" and falls back to a tearing Vulkan path.
+if(WIN32)
+  set(DREAM_DXGI ON CACHE BOOL "Windows DXGI flip-model presenter" FORCE)
+endif()
 add_subdirectory(${DREAMCOMP_DIR} dreamcomp)
 add_subdirectory(game)
 
