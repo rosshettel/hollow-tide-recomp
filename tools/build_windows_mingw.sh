@@ -27,6 +27,21 @@ if [[ ! -f "$sdl_root/lib/cmake/SDL3/SDL3Config.cmake" ]]; then
     "https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-devel-3.4.20-mingw.tar.gz"
   tar -C "$deps" -xf "$deps/SDL3-devel-mingw.tar.gz"
 fi
+# Redistributable Windows x64 SDL3.dll (MSVC-built). Prefer this over the mingw
+# devel copy next to the exe — same C ABI, fewer "not designed to run on Windows"
+# reports from bad USB copies / wrong-arch mixups.
+sdl_runtime_zip="$deps/SDL3-3.4.20-win32-x64.zip"
+sdl_runtime_dll="$deps/SDL3-win32-x64/SDL3.dll"
+if [[ ! -f "$sdl_runtime_dll" ]]; then
+  echo "fetching SDL3 win32-x64 runtime…"
+  curl -fsSL -o "$sdl_runtime_zip" \
+    "https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-3.4.20-win32-x64.zip"
+  rm -rf "$deps/SDL3-win32-x64"
+  mkdir -p "$deps/SDL3-win32-x64"
+  tar -C "$deps/SDL3-win32-x64" -xf "$sdl_runtime_zip" 2>/dev/null ||
+    unzip -o -d "$deps/SDL3-win32-x64" "$sdl_runtime_zip"
+fi
+[[ -f "$sdl_runtime_dll" ]] || { echo "missing $sdl_runtime_dll" >&2; exit 1; }
 vk_root="$deps/mingw-vulkan/mingw64"
 if [[ ! -f "$vk_root/lib/libvulkan-1.dll.a" ]]; then
   echo "fetching mingw Vulkan headers + loader…"
@@ -68,27 +83,48 @@ exe="$build/game/hydro-thunder.exe"
 rm -rf "$dist"
 mkdir -p "$dist"
 cp "$exe" "$dist/hydro-thunder.exe"
-cp "$sdl_root/bin/SDL3.dll" "$dist/"
-# MinGW runtime (the three "DLL was not found" errors without these).
-# -print-file-name finds them regardless of Homebrew cellar layout / symlinks.
-for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-  src="$(x86_64-w64-mingw32-g++ -print-file-name="$dll")"
-  if [[ ! -f "$src" ]]; then
-    # pthread often lives only under the target bin/
-    gcc_bin="$(dirname "$(readlink -f "$(command -v x86_64-w64-mingw32-g++)" 2>/dev/null ||
-      realpath "$(command -v x86_64-w64-mingw32-g++)")")"
-    for cand in "$gcc_bin/../x86_64-w64-mingw32/bin/$dll" "$gcc_bin/../x86_64-w64-mingw32/lib/$dll"; do
-      [[ -f "$cand" ]] && src=$cand && break
-    done
-  fi
-  [[ -f "$src" ]] || { echo "missing MinGW runtime $dll (g++ said: $src)" >&2; exit 1; }
-  cp "$src" "$dist/"
-done
+cp "$sdl_runtime_dll" "$dist/SDL3.dll"
+# libgcc/libstdc++ are statically linked (toolchain file). winpthread stays shared.
+pthread_src="$(x86_64-w64-mingw32-g++ -print-file-name=libwinpthread-1.dll)"
+if [[ ! -f "$pthread_src" ]]; then
+  gcc_bin="$(dirname "$(realpath "$(command -v x86_64-w64-mingw32-g++)")")"
+  for cand in "$gcc_bin/../x86_64-w64-mingw32/bin/libwinpthread-1.dll" \
+              "$gcc_bin/../x86_64-w64-mingw32/lib/libwinpthread-1.dll"; do
+    [[ -f "$cand" ]] && pthread_src=$cand && break
+  done
+fi
+[[ -f "$pthread_src" ]] || { echo "missing libwinpthread-1.dll (g++ said: $pthread_src)" >&2; exit 1; }
+cp "$pthread_src" "$dist/"
 # Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
 # would shadow the GPU vendor's loader (what a 4070 Ti already has in System32).
 cp "$root/game/hydrothunder.toml" "$dist/"
 cp -R "$build/game/frontend" "$dist/frontend"
 # Optional: unlock_all / widescreen toggles live in the launcher settings after first run.
+
+# Refuse to stage a non-Windows / wrong-arch SDL3.dll (the "not designed to run on
+# Windows" dialog). file(1) must report PE32+ x86-64.
+if command -v file >/dev/null; then
+  sdl_file="$(file -b "$dist/SDL3.dll")"
+  echo "SDL3.dll: $sdl_file"
+  [[ "$sdl_file" == *"PE32+"* && "$sdl_file" == *"x86-64"* ]] || {
+    echo "refusing to stage non-x64 Windows SDL3.dll: $sdl_file" >&2
+    exit 1
+  }
+fi
+# Exe must not still depend on the huge shared libgcc/libstdc++ DLLs.
+if command -v x86_64-w64-mingw32-objdump >/dev/null; then
+  deps_dump="$(x86_64-w64-mingw32-objdump -p "$dist/hydro-thunder.exe")"
+  for dll in libgcc_s_seh-1.dll libstdc++-6.dll; do
+    if grep -q "DLL Name: $dll" <<<"$deps_dump"; then
+      echo "exe still imports $dll — static MinGW link failed" >&2
+      exit 1
+    fi
+  done
+  grep -q "DLL Name: libwinpthread-1.dll" <<<"$deps_dump" || {
+    echo "exe unexpectedly does not import libwinpthread-1.dll" >&2
+    exit 1
+  }
+fi
 
 # Double-click this. cwd is forced to the bat's folder so hydrothunder.toml and frontend/ resolve.
 cat > "$dist/Play Hydro Thunder.bat" <<'EOF'
@@ -103,10 +139,16 @@ Hydro Thunder (Dreamcast) — portable Windows build
 
 What to copy
 ------------
-Copy this entire folder to a USB stick (or anywhere on the Windows PC),
-including the three lib*.dll files next to the exe (MinGW runtime).
+Delete any older Hydro Thunder folder on the USB first, then copy this entire
+folder (or unzip hydro-thunder-windows-x64.zip on the Windows PC).
+You need: hydro-thunder.exe, SDL3.dll, libwinpthread-1.dll, frontend/,
+hydrothunder.toml, and the .bat.
 You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
 Do not redistribute the disc image.
+
+If Windows says SDL3.dll is "not designed to run on Windows", the copy is
+corrupt or mixed with an old build — delete the folder and re-copy/unzip fresh.
+This build needs 64-bit Windows 10/11 (not 32-bit).
 
 How to run (no command line)
 ----------------------------
@@ -168,5 +210,17 @@ Optional (launcher Settings, or later)
   widescreen     wide races (menus stay 4:3)
 EOF
 
+# Zip without Mac resource forks — more reliable than Finder→USB for PE files.
+zip_path="$root/dist/hydro-thunder-windows-x64.zip"
+mkdir -p "$root/dist"
+rm -f "$zip_path"
+(
+  cd "$dist"
+  # -X strips extra attrs; -r recursive. Run from inside so paths are flat in the zip.
+  zip -X -r "$zip_path" .
+)
+
 echo "staged: $dist"
+echo "zip:    $zip_path"
 ls -la "$dist"
+ls -la "$zip_path"

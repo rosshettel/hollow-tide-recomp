@@ -14,21 +14,26 @@ Produced on this Mac via mingw-w64 cross-compile (`tools/build_windows_mingw.sh`
 dist/windows/
   Play Hydro Thunder.bat   # double-click this
   hydro-thunder.exe        # launcher built in (disc picker)
-  SDL3.dll
-  libgcc_s_seh-1.dll       # MinGW runtime (required)
-  libstdc++-6.dll
-  libwinpthread-1.dll
+  SDL3.dll                 # official SDL 3.4.20 win32-x64 runtime
+  libwinpthread-1.dll      # only MinGW runtime still shared
   hydrothunder.toml
   frontend/                # launcher UI + fonts
   README.txt
+
+dist/hydro-thunder-windows-x64.zip   # same contents; prefer unzip on Windows
 ```
 
-No `vulkan-1.dll` in the folder — Windows uses the GPU vendor loader from System32
-(important for an RTX 4070 Ti with stock NVIDIA drivers).
+`libgcc` / `libstdc++` are statically linked into the exe. No `vulkan-1.dll` —
+Windows uses the GPU vendor loader from System32 (RTX 4070 Ti / stock NVIDIA).
 
-Copy the whole folder to a USB stick. Disc image is **not** included (rule 1).
+Delete any older folder on the USB first, then copy `dist/windows/` or unzip the
+zip on the Windows PC. Disc image is **not** included (rule 1).
 Double-click `Play Hydro Thunder.bat` → pick disc in the launcher → Start Game.
 Disc path persists in `%APPDATA%\dreamcomp\hydrothunder\settings.ini`.
+
+If Windows says `SDL3.dll` is “not designed to run on Windows”, the copy is
+corrupt or mixed with an old build — wipe the folder and re-copy/unzip. Needs
+64-bit Windows 10/11.
 
 Rebuild: `./tools/build_windows_mingw.sh`
 

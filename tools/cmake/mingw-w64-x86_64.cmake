@@ -16,3 +16,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+# Portable USB folder: bake libgcc/libstdc++ into the exe (avoids the 29MB
+# libstdc++-6.dll on the stick). winpthread still needs its small shared DLL.
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++")
