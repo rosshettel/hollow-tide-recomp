@@ -53,9 +53,10 @@ archive listing).
 - **windows-x64** (`windows-latest`): VS Build Tools + `clang-cl` + Ninja + Vulkan
   SDK (`glslc`) + SDL 3.4.20. Same clang-cl style as dreamcomp’s primary Windows
   path. Packages with `tools/package_windows.sh`.
-- **macos-arm64** (`macos-14`): Homebrew `sdl3`, `molten-vk`, `shaderc`,
-  `vulkan-loader`. Packages with `tools/package_macos.sh` (ships dylibs + MoltenVK
-  ICD + `Play Hydro Thunder.command`).
+- **macos-arm64** (`macos-latest`, Apple Silicon): Homebrew `sdl3`, `molten-vk`,
+  `shaderc`, `vulkan-loader`. Packages with `tools/package_macos.sh` (ships dylibs +
+  MoltenVK ICD + `Play Hydro Thunder.command`). (`macos-14` remapped to an unsupported
+  label on this account.)
 - **android**: `if: false` until M9.
 
 ## Local packaging (no Actions)
