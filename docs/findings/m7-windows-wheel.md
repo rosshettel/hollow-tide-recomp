@@ -15,7 +15,6 @@ dist/windows/
   Play Hydro Thunder.bat   # double-click this
   hydro-thunder.exe        # launcher built in (disc picker)
   SDL3.dll                 # official SDL 3.4.20 win32-x64 runtime
-  libwinpthread-1.dll      # only MinGW runtime still shared
   hydrothunder.toml
   frontend/                # launcher UI + fonts
   README.txt
@@ -23,8 +22,9 @@ dist/windows/
 dist/hydro-thunder-windows-x64.zip   # same contents; prefer unzip on Windows
 ```
 
-`libgcc` / `libstdc++` are statically linked into the exe. No `vulkan-1.dll` —
-Windows uses the GPU vendor loader from System32 (RTX 4070 Ti / stock NVIDIA).
+MinGW runtimes (`libgcc` / `libstdc++` / `winpthread`) are statically linked —
+no `lib*.dll` beside the exe (avoids Win11 Smart App Control `0xc0e90002` on
+unsigned MinGW DLLs). No `vulkan-1.dll` — use the GPU vendor loader in System32.
 
 Delete any older folder on the USB first, then copy `dist/windows/` or unzip the
 zip on the Windows PC. Disc image is **not** included (rule 1).

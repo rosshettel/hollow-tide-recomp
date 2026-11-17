@@ -17,6 +17,18 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-# Portable USB folder: bake libgcc/libstdc++ into the exe (avoids the 29MB
-# libstdc++-6.dll on the stick). winpthread still needs its small shared DLL.
+# Portable USB folder: bake MinGW runtimes into the exe so the stick only needs
+# the official SDL3.dll beside hydro-thunder.exe. Windows 11 Smart App Control
+# (0xc0e90002) blocks unsigned libwinpthread-1.dll when shipped separately.
+#
+# -Bstatic must stay open through the driver's trailing -lpthread (do NOT flip
+# back to -Bdynamic). These flags have to live at the end of the link line, so
+# they go in STANDARD_LIBRARIES — and the build script -D-forces them because
+# CMake's Windows-GNU module overwrites *_INIT.
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++")
+set(_HT_MINGW_WINLIBS
+  "-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32")
+set(CMAKE_C_STANDARD_LIBRARIES
+  "${_HT_MINGW_WINLIBS} -Wl,-Bstatic -lwinpthread -lpthread")
+set(CMAKE_CXX_STANDARD_LIBRARIES
+  "${_HT_MINGW_WINLIBS} -Wl,-Bstatic -lwinpthread -lpthread")

@@ -64,12 +64,18 @@ fi
 # Host glslc builds the SPIR-V headers; the cross link uses Windows Vulkan + SDL3.
 # Host dream-translate emits the C++; mingw only compiles/links it.
 # Frontend ON so a double-click opens the disc picker (no command line).
+# Force STANDARD_LIBRARIES: Windows-GNU overwrites toolchain *_INIT, and
+# -Bstatic must trail the link line so the driver's -lpthread stays static.
+mingw_winlibs="-lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32"
+mingw_stdlibs="$mingw_winlibs -Wl,-Bstatic -lwinpthread -lpthread"
 cmake -S "$root" -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="$root/tools/cmake/mingw-w64-x86_64.cmake" \
   -DCMAKE_PREFIX_PATH="$sdl_root;$vk_root" \
   -DVulkan_INCLUDE_DIR="$vk_root/include" \
   -DVulkan_LIBRARY="$vk_root/lib/libvulkan-1.dll.a" \
+  -DCMAKE_C_STANDARD_LIBRARIES="$mingw_stdlibs" \
+  -DCMAKE_CXX_STANDARD_LIBRARIES="$mingw_stdlibs" \
   -DDREAM_TRANSLATE_EXECUTABLE="$host_translate" \
   -DDREAM_BUILD_TESTS=OFF \
   -DDREAMCOMP_FRONTEND=ON \
@@ -84,17 +90,7 @@ rm -rf "$dist"
 mkdir -p "$dist"
 cp "$exe" "$dist/hydro-thunder.exe"
 cp "$sdl_runtime_dll" "$dist/SDL3.dll"
-# libgcc/libstdc++ are statically linked (toolchain file). winpthread stays shared.
-pthread_src="$(x86_64-w64-mingw32-g++ -print-file-name=libwinpthread-1.dll)"
-if [[ ! -f "$pthread_src" ]]; then
-  gcc_bin="$(dirname "$(realpath "$(command -v x86_64-w64-mingw32-g++)")")"
-  for cand in "$gcc_bin/../x86_64-w64-mingw32/bin/libwinpthread-1.dll" \
-              "$gcc_bin/../x86_64-w64-mingw32/lib/libwinpthread-1.dll"; do
-    [[ -f "$cand" ]] && pthread_src=$cand && break
-  done
-fi
-[[ -f "$pthread_src" ]] || { echo "missing libwinpthread-1.dll (g++ said: $pthread_src)" >&2; exit 1; }
-cp "$pthread_src" "$dist/"
+# MinGW runtimes (libgcc/libstdc++/winpthread) are statically linked — see toolchain.
 # Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
 # would shadow the GPU vendor's loader (what a 4070 Ti already has in System32).
 cp "$root/game/hydrothunder.toml" "$dist/"
@@ -111,20 +107,20 @@ if command -v file >/dev/null; then
     exit 1
   }
 fi
-# Exe must not still depend on the huge shared libgcc/libstdc++ DLLs.
+# Exe must not still depend on shared MinGW runtime DLLs (SAC blocks unsigned ones).
 if command -v x86_64-w64-mingw32-objdump >/dev/null; then
   deps_dump="$(x86_64-w64-mingw32-objdump -p "$dist/hydro-thunder.exe")"
-  for dll in libgcc_s_seh-1.dll libstdc++-6.dll; do
+  for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
     if grep -q "DLL Name: $dll" <<<"$deps_dump"; then
       echo "exe still imports $dll — static MinGW link failed" >&2
       exit 1
     fi
   done
-  grep -q "DLL Name: libwinpthread-1.dll" <<<"$deps_dump" || {
-    echo "exe unexpectedly does not import libwinpthread-1.dll" >&2
-    exit 1
-  }
 fi
+[[ ! -e "$dist/libwinpthread-1.dll" ]] || {
+  echo "refusing to ship libwinpthread-1.dll beside the exe" >&2
+  exit 1
+}
 
 # Double-click this. cwd is forced to the bat's folder so hydrothunder.toml and frontend/ resolve.
 cat > "$dist/Play Hydro Thunder.bat" <<'EOF'
@@ -141,14 +137,14 @@ What to copy
 ------------
 Delete any older Hydro Thunder folder on the USB first, then copy this entire
 folder (or unzip hydro-thunder-windows-x64.zip on the Windows PC).
-You need: hydro-thunder.exe, SDL3.dll, libwinpthread-1.dll, frontend/,
-hydrothunder.toml, and the .bat.
+You need: hydro-thunder.exe, SDL3.dll, frontend/, hydrothunder.toml, and the .bat.
+(No lib*.dll — MinGW runtimes are linked into the exe.)
 You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
 Do not redistribute the disc image.
 
-If Windows says SDL3.dll is "not designed to run on Windows", the copy is
-corrupt or mixed with an old build — delete the folder and re-copy/unzip fresh.
-This build needs 64-bit Windows 10/11 (not 32-bit).
+If Windows says a DLL is "not designed to run on Windows" with error 0xc0e90002,
+that is often Windows 11 Smart App Control blocking an unsigned DLL — this build
+avoids shipping those. Needs 64-bit Windows 10/11.
 
 How to run (no command line)
 ----------------------------
