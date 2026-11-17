@@ -126,10 +126,13 @@ jobs:
         run: |
           shortsha="$(echo "${{ github.sha }}" | cut -c1-7)"
           echo "shortsha=$shortsha" >> "$GITHUB_OUTPUT"
-          export HT_ZIP_PATH="$PWD/dist/hollow-tide-windows-${shortsha}.zip"
+          # Relative path: upload-artifact on Windows cannot resolve Git Bash /d/a/... paths.
+          zip_rel="dist/hollow-tide-windows-${shortsha}.zip"
+          export HT_ZIP_PATH="$PWD/$zip_rel"
           # HT_SDL3_DLL already set from the win32-x64 runtime fetch step.
           bash tools/package_windows.sh build "$shortsha"
-          echo "zip=$HT_ZIP_PATH" >> "$GITHUB_OUTPUT"
+          test -f "$HT_ZIP_PATH"
+          echo "zip=$zip_rel" >> "$GITHUB_OUTPUT"
 
       - name: Audit zip (no game data)
         shell: bash
@@ -188,9 +191,11 @@ jobs:
         run: |
           shortsha="$(echo "${{ github.sha }}" | cut -c1-7)"
           echo "shortsha=$shortsha" >> "$GITHUB_OUTPUT"
-          export HT_ZIP_PATH="$PWD/dist/hollow-tide-macos-arm64-${shortsha}.zip"
+          zip_rel="dist/hollow-tide-macos-arm64-${shortsha}.zip"
+          export HT_ZIP_PATH="$PWD/$zip_rel"
           bash tools/package_macos.sh build "$shortsha"
-          echo "zip=$HT_ZIP_PATH" >> "$GITHUB_OUTPUT"
+          test -f "$HT_ZIP_PATH"
+          echo "zip=$zip_rel" >> "$GITHUB_OUTPUT"
 
       - name: Audit zip (no game data)
         run: |
