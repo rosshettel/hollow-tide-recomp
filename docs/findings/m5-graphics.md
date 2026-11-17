@@ -36,6 +36,14 @@ the Resolution setting).
 - Two-race 12:5 run: render target 4:3 (menus), wide (race 1), 4:3 (title after game over), wide
   (race 2). Confirmed by you in play, intro through results.
 
+- HUD anchors pinned in `game/hud_overrides.ini`: TIME EXTENDED! sits level with the position
+  counter, so the `edges` grouping merged banner, counter and map into one centred element on
+  every blink. Left: speedometer and the timer strip, gauge and timer textures only (a wider
+  rectangle with the banner font split WINNER into a left W and a centred INNER); centre: the
+  countdown; right: map, position and the OLD TIME / YOUR TIME panel (left edge 470, past the "!").
+  12:5 frames 7976-7992 keep one layout with the banner on and off; TIME EXTENDED and WINNER
+  confirmed by you in play.
+
 ## Checks
 
 - 12:5 shots, race frame 3970 and Choose Track 1180 (`dc.py shots ... -- --aspect 12:5`).
