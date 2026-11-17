@@ -31,11 +31,18 @@ zip on the Windows PC. Disc image is **not** included (rule 1).
 Double-click `Play Hydro Thunder.bat` → pick disc in the launcher → Start Game.
 Disc path persists in `%APPDATA%\dreamcomp\hydrothunder\settings.ini`.
 
-If Windows says `SDL3.dll` is “not designed to run on Windows”, the copy is
-corrupt or mixed with an old build — wipe the folder and re-copy/unzip. Needs
-64-bit Windows 10/11.
+Prefer the GitHub Actions `beta` Windows zip (clang-cl) over the Mac mingw
+cross build. Rebuild locally: `./tools/build_windows_mingw.sh` (fallback only).
 
-Rebuild: `./tools/build_windows_mingw.sh`
+### Playtest fixes (bindings path + tearing)
+
+- Controls must save to `%APPDATA%\dreamcomp\hydrothunder\bindings.txt` — the same
+  file `--bindings` loads. An earlier bug wrote the launcher Controls tab to
+  `%APPDATA%\dream-recomp\dream-recomp\bindings.txt`, so the wheel looked fine in
+  the UI and did nothing in-game (keyboard still worked).
+- Windows defaults to DXGI flip-model present (`latency = low`) for vsync without
+  the tearing some NVIDIA Vulkan windowed swapchains show. Settings → Latency →
+  Standard switches back to the Vulkan swapchain.
 
 ## Keyboard defaults
 

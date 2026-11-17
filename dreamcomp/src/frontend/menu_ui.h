@@ -160,6 +160,10 @@ private:
     std::string controls_role_rows();
     void load_bindings();
     void save_bindings();
+    // Same file the game loads via --bindings (…/dreamcomp/<port>/bindings.txt), not the
+    // engine's dream-recomp pref path — otherwise the Controls tab saves somewhere the boot
+    // path never reads and the wheel appears to do nothing in-game.
+    std::filesystem::path bindings_file() const;
     dream::render::DeviceBindings& editing();
     bool capture_event(const SDL_Event& ev);
     void finish_capture(const dream::render::Binding* b);

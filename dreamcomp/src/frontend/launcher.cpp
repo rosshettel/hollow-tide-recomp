@@ -131,6 +131,12 @@ public:
             outcome_ = Outcome::Quit;
             done_ = true;
         };
+        // Same bindings.txt the boot path opens via --bindings (beside settings.ini).
+        host.bindings_path = [this] {
+            if (!ctx_.settings || ctx_.settings->file().empty())
+                return std::string();
+            return (ctx_.settings->file().parent_path() / "bindings.txt").string();
+        };
         ui_ = std::make_unique<MenuUi>(cfg, Mode::Pregame, host);
         if (!ui_->load(context_, error))
             return false;

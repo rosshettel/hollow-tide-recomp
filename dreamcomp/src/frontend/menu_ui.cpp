@@ -886,33 +886,49 @@ std::string MenuUi::guid_for_instance(std::uint32_t instance_id) const {
     return buf;
 }
 
+std::filesystem::path MenuUi::bindings_file() const {
+    if (host_.bindings_path) {
+        std::string p = host_.bindings_path();
+        if (!p.empty())
+            return std::filesystem::path(p);
+    }
+    if (!config_dir_.empty())
+        return config_dir_ / "bindings.txt";
+    const std::string fallback = dream::render::vk::default_bindings_path();
+    return fallback.empty() ? std::filesystem::path{} : std::filesystem::path(fallback);
+}
+
 void MenuUi::load_bindings() {
-    std::string path = host_.bindings_path ? host_.bindings_path() : std::string();
-    if (path.empty())
-        path = dream::render::vk::default_bindings_path();
+    const auto path = bindings_file();
     bindings_ = dream::render::Bindings::defaults();
-    std::ifstream in(std::filesystem::u8path(path), std::ios::binary);
-    if (in) {
-        std::stringstream ss;
-        ss << in.rdbuf();
-        bindings_ = dream::render::Bindings::from_text(ss.str());
+    if (!path.empty()) {
+        std::ifstream in(path, std::ios::binary);
+        if (in) {
+            std::stringstream ss;
+            ss << in.rdbuf();
+            bindings_ = dream::render::Bindings::from_text(ss.str());
+        }
     }
     bindings_loaded_ = true;
 }
 
 void MenuUi::save_bindings() {
-    std::string path = host_.bindings_path ? host_.bindings_path() : std::string();
-    if (path.empty())
-        path = dream::render::vk::default_bindings_path();
+    const auto path = bindings_file();
+    if (path.empty()) {
+        std::fprintf(stderr, "controls: no bindings path\n");
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
     const std::string text = bindings_.to_text();
-    std::ofstream out(std::filesystem::u8path(path), std::ios::binary);
+    std::ofstream out(path, std::ios::binary);
     out.write(text.data(), static_cast<std::streamsize>(text.size()));
     if (!out) {
-        std::fprintf(stderr, "controls: cannot write %s\n", path.c_str());
+        std::fprintf(stderr, "controls: cannot write %s\n", path.string().c_str());
         return;
     }
     out.close();
-    std::printf("controls: saved %s\n", path.c_str());
+    std::printf("controls: saved %s\n", path.string().c_str());
     if (host_.bindings_changed)
         host_.bindings_changed();
 }
@@ -1084,8 +1100,13 @@ std::string MenuUi::tab_graphics() {
                    "Borderless fullscreen on the window's display. Alt+Enter switches at any time.",
                    true);
 #ifdef _WIN32
+#if defined(_WIN32)
+    const char* latency_default = "low";
+#else
+    const char* latency_default = "standard";
+#endif
     s += row_radio("latency", "Latency", {{"standard", "Standard"}, {"low", "Low"}},
-                   draft_.get("latency", "standard") == "low" ? "low" : "standard",
+                   draft_.get("latency", latency_default) == "low" ? "low" : "standard",
                    "<b>Standard</b> keeps a few frames queued for the screen: perfectly smooth "
                    "everywhere.<br/><br/><b>Low</b> hands each frame to the screen as directly as "
                    "Windows allows, about 13 ms sooner. It needs a computer that finishes every "
@@ -1743,9 +1764,8 @@ void MenuUi::refresh_joysticks() {
     int count = 0;
     if (SDL_JoystickID* ids = SDL_GetJoysticks(&count)) {
         for (int i = 0; i < count; ++i) {
-            // Wheels and pedal boxes are usually not gamepads; skip sticks already claimed as pads.
-            if (SDL_IsGamepad(ids[i]))
-                continue;
+            // List every stick, including ones SDL also maps as gamepads: some wheels ship with a
+            // gamepad mapping and would otherwise be invisible to the Wheel / pedals profile.
             JoyChoice j;
             j.guid = guid_for_instance(ids[i]);
             const char* n = SDL_GetJoystickNameForID(ids[i]);

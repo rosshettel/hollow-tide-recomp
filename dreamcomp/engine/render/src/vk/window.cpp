@@ -274,6 +274,13 @@ bool Window::create_vulkan_swapchain(std::uint32_t& count) {
     sci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     sci.presentMode = choose_present_mode();
     sci.clipped = VK_TRUE;
+    {
+        const char* mode = sci.presentMode == VK_PRESENT_MODE_FIFO_KHR         ? "fifo(vsync)"
+                           : sci.presentMode == VK_PRESENT_MODE_MAILBOX_KHR    ? "mailbox"
+                           : sci.presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR  ? "immediate"
+                                                                               : "other";
+        std::fprintf(stderr, "swapchain: present mode %s, %u images\n", mode, image_count);
+    }
     if (vkCreateSwapchainKHR(ctx_.device(), &sci, nullptr, &swapchain_) != VK_SUCCESS) {
         error_ = "vkCreateSwapchainKHR failed";
         return false;
@@ -425,28 +432,34 @@ void Window::refresh_devices() {
     // Fixed edit targets for the binding screen. Connected pad/joystick *names* show on the
     // joystick role rows; the gamepad set is shared across every recognised pad.
     devices_ = {"KEYBOARD", "GAMEPAD", "JOYSTICK"};
+    // GUIDs claimed as wheel/pedals/handbrake are opened as raw joysticks even when SDL also
+    // maps them as gamepads, and are kept out of pads_ so the two profiles do not fight.
+    std::vector<std::string> role_guids;
+    role_guids.reserve(kJoyRoleCount);
+    for (unsigned r = 0; r < kJoyRoleCount; ++r)
+        if (!bindings_.joy_guid[r].empty())
+            role_guids.push_back(bindings_.joy_guid[r]);
+    auto is_role = [&](const std::string& g) {
+        for (const std::string& want : role_guids)
+            if (want == g)
+                return true;
+        return false;
+    };
     int count = 0;
-    if (SDL_JoystickID* ids = SDL_GetGamepads(&count)) {
-        for (int i = 0; i < count; ++i) {
-            if (SDL_Gamepad* g = SDL_OpenGamepad(ids[i]))
-                pads_.push_back(g);
-        }
-        SDL_free(ids);
-    }
-    count = 0;
     if (SDL_JoystickID* ids = SDL_GetJoysticks(&count)) {
         for (int i = 0; i < count; ++i) {
-            // Skip sticks that are already open as gamepads: their axes are read through the
-            // gamepad bindings. Wheels and pedal boxes usually are not gamepads.
-            if (SDL_IsGamepad(ids[i]))
+            const std::string guid = guid_for_instance(ids[i]);
+            const bool role = is_role(guid);
+            // Unassigned gamepads stay on the gamepad path; everything else (and any role device)
+            // is available to the joystick profile.
+            if (!role && SDL_IsGamepad(ids[i]))
                 continue;
             if (SDL_Joystick* j = SDL_OpenJoystick(ids[i])) {
                 JoyDev dev;
                 dev.joy = j;
-                dev.guid = guid_for_instance(ids[i]);
+                dev.guid = guid;
                 const char* name = SDL_GetJoystickName(j);
                 dev.name = name && *name ? name : "JOYSTICK";
-                // Upper-case for the overlay font.
                 for (char& ch : dev.name)
                     ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
                 joy_choices_.emplace_back(dev.guid, dev.name);
@@ -455,10 +468,23 @@ void Window::refresh_devices() {
         }
         SDL_free(ids);
     }
+    count = 0;
+    if (SDL_JoystickID* ids = SDL_GetGamepads(&count)) {
+        for (int i = 0; i < count; ++i) {
+            if (is_role(guid_for_instance(ids[i])))
+                continue;
+            if (SDL_Gamepad* g = SDL_OpenGamepad(ids[i]))
+                pads_.push_back(g);
+        }
+        SDL_free(ids);
+    }
 }
 
 void Window::set_bindings(const Bindings& b) {
     bindings_ = b;
+    // Re-open devices so wheel/pedal GUIDs that SDL also maps as gamepads are claimed for the
+    // joystick profile (refresh_devices reads bindings_.joy_guid).
+    refresh_devices();
     // Names to codes once, here. Doing it per frame would mean a string lookup per control per
     // frame, and would also mean a typo in the file costing performance rather than being noticed.
     auto resolve_pad = [](const DeviceBindings& d, Resolved* out, unsigned slot, bool keyboard) {

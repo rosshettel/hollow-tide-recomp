@@ -340,9 +340,17 @@ public:
         // "exact" keeps the Dreamcast's 59.94 Hz.
         if (g_settings.get("frame_timing", "display") != "exact" && !has_flag(args, "--sync-display"))
             args.push_back("--sync-display");
-        // Latency (docs/PACING.md): "low" presents through DXGI on Windows (about 13 ms less where
-        // every frame is finished in time); "standard" (default) through the Vulkan swapchain.
-        if (g_settings.get("latency", "standard") == "low" && !has_flag(args, "--present-path")) {
+        // Latency (docs/PACING.md): "low" presents through DXGI flip-model on Windows (vsync without
+        // the tearing some NVIDIA Vulkan swapchains show in a bordered window); "standard" through
+        // the Vulkan swapchain. Default to low on Windows — a 4070 Ti / flip-model path — and keep
+        // standard elsewhere (and as an explicit Settings choice if DXGI misbehaves on Intel).
+#if defined(_WIN32)
+        const char* latency_default = "low";
+#else
+        const char* latency_default = "standard";
+#endif
+        if (g_settings.get("latency", latency_default) == "low" &&
+            !has_flag(args, "--present-path")) {
             args.push_back("--present-path");
             args.push_back("dxgi");
         }
