@@ -43,9 +43,15 @@ cross build. Rebuild locally: `./tools/build_windows_mingw.sh` (fallback only).
   Steering / Gas / Brake / Boost (not Analog X/Y).
 - `DREAM_DXGI=ON` in the Windows CI/portable build — earlier `latency=low` asked
   for DXGI but the presenter was not compiled in, so Vulkan tearing remained.
-  Windows defaults: Latency Low (DXGI), Frame rate 60 (no high-Hz interpolation).
-  If an old `settings.ini` still says otherwise, set those in Graphics or delete
-  the file.
+  Windows default: Latency Low (DXGI).
+- The "tearing" in the 2026-11-16 playtest video (high-Hz ultrawide) was frame
+  interpolation, not presentation: stray streaks and misplaced HUD icons in
+  every other displayed frame. Reproduced on macOS with `--interpolate
+  DREAM_SHOT_INTERP=1` in a race: blended frames torn, real frames clean.
+  Spray particles and blinking HUD pieces reorder between frames, so the
+  order-based strip matcher pairs neighbours with the same texture. The port now
+  sets `PortInfo::interpolation = false`: the Frame rate setting is hidden and a
+  saved `fps = auto/120` is ignored.
 
 ## Keyboard defaults
 
@@ -61,7 +67,8 @@ F1 opens the HUD editor; it does not open bindings.
 1. Controls → **Wheel / pedals** → Edit Profile (or footer toggle to **W**)
 2. Click WHEEL / PEDALS / HANDBRAKE to assign each physical device
 3. Bind by clicking a box then using the hardware:
-   - Analog Left/Right ← wheel
+   - Steering ← turn the wheel either way; binds the whole axis (left half to
+     Stick Left, right half to Stick Right)
    - R Trigger ← gas, L Trigger ← brake
    - A ← clutch (boost); A’s second box ← optional handbrake boost
 4. Saved immediately to `%APPDATA%\dreamcomp\hydrothunder\bindings.txt`

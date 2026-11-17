@@ -215,4 +215,33 @@ std::string mods_setting(const std::vector<ModEntry>& mods) {
     return out;
 }
 
+bool steering_axis(dream::render::PadControl control, const dream::render::Binding& b) {
+    // Only wheel axes carry a sign in the joystick profile; pedals are full-range (sign 0).
+    return control == dream::render::PadControl::StickLeft &&
+           b.source == dream::render::BindSource::JoyAxis && b.sign != 0;
+}
+
+void assign_binding(dream::render::DeviceBindings& d, dream::render::PadControl control,
+                    unsigned slot, const dream::render::Binding& b) {
+    using dream::render::PadControl;
+    auto put = [&](PadControl c, const dream::render::Binding& nb) {
+        for (unsigned i = 0; i < dream::render::kPadControlCount; ++i) {
+            if (d.b[i] == nb)
+                d.b[i] = {};
+            if (d.alt[i] == nb)
+                d.alt[i] = {};
+        }
+        d.slot(c, slot) = nb;
+    };
+    if (!steering_axis(control, b)) {
+        put(control, b);
+        return;
+    }
+    dream::render::Binding left = b, right = b;
+    left.sign = -1;
+    right.sign = 1;
+    put(PadControl::StickLeft, left);
+    put(PadControl::StickRight, right);
+}
+
 }  // namespace dreamcomp::frontend

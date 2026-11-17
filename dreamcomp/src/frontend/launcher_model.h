@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "dream/render/input.h"
+
 namespace dreamcomp {
 class Settings;
 }
@@ -91,5 +93,13 @@ struct ModEntry {
 std::vector<ModEntry> list_mods(const std::filesystem::path& mods_dir, const std::string& setting);
 std::string mods_setting(const std::vector<ModEntry>& mods);  // enabled names in list order
 std::vector<std::string> split_list(const std::string& s);    // "a, b" -> {"a","b"}
+
+// ---- controls --------------------------------------------------------------------------------
+// A wheel axis on Stick Left: the joystick profile's single Steering row.
+bool steering_axis(dream::render::PadControl control, const dream::render::Binding& b);
+// Puts `b` in `control`'s `slot`, taking it off every other control first (one physical input,
+// one control). A steering axis binds both halves: - on Stick Left, + on Stick Right.
+void assign_binding(dream::render::DeviceBindings& d, dream::render::PadControl control,
+                    unsigned slot, const dream::render::Binding& b);
 
 }  // namespace dreamcomp::frontend

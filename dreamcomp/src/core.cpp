@@ -327,17 +327,16 @@ public:
         if (g_settings.get_bool("fullscreen", false) && !has_flag(args, "--fullscreen"))
             args.push_back("--fullscreen");
 #if defined(_WIN32)
-        // Windows: DXGI flip-model by default (Vulkan windowed often tears on NVIDIA). Keep
-        // guest-rate frames (fps=60) — high-Hz interpolation has looked like flashing sprites.
+        // Windows: DXGI flip-model by default (Vulkan windowed often tears on NVIDIA).
         const char* latency_default = "low";
-        const char* fps_default = "60";
 #else
         const char* latency_default = "standard";
-        const char* fps_default = "auto";
 #endif
-        // Frame rate (docs/INTERPOLATION.md): auto blends on ≥120 Hz; 120 forces it; 60 is guest only.
-        if (!has_flag(args, "--interpolate") && !has_flag(args, "--interpolate-auto")) {
-            const std::string fps = g_settings.get("fps", fps_default);
+        // Frame rate (docs/INTERPOLATION.md): auto blends on ≥120 Hz; 120 forces it; 60 is guest
+        // only. Ports that opt out ignore a saved setting too.
+        if (g_port->interpolation && !has_flag(args, "--interpolate") &&
+            !has_flag(args, "--interpolate-auto")) {
+            const std::string fps = g_settings.get("fps", "auto");
             if (fps == "auto")
                 args.push_back("--interpolate-auto");
             else if (fps == "120")

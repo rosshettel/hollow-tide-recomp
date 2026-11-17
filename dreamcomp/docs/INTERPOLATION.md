@@ -30,6 +30,10 @@ keeps running at its own 60 Hz (series rule: never change the logic rate).
 | G3 Cost | per-frame matching + second render within budget on Iris Xe (`DREAM_PROFILE=1`) | **passed**: 0.03-0.10 ms per blend; unthrottled 3.9x real time with interpolation vs 4.1x without (scale 1) |
 | G4 Pacing | 120 Hz output smooth (frame times even), audio unaffected | **partly measured** 2026-10-06: with `--present-mode immediate` the 60 Hz laptop panel no longer blocks the second present, and a fight runs at 1.0x real time with 1186 blended + 1192 real presents (~120/s), 0 audio underruns. Seeing the smoothness still needs a >60 Hz display. With vsync on a 60 Hz panel the second present blocks and the game runs at 0.5x, hence `fps = auto` (on only at 120 Hz or more; above 60 Hz until 2026-11-16, when a 75 Hz panel ran at 0.8x). Before the pacing fix in `engine-changes.md` (2026-10-06) runs without vsync were not throttled at all |
 
+Hydro Thunder (2026-11-16): blended race frames show stray streaks and misplaced HUD icons (spray
+particles and blinking HUD pieces reorder, so same-parameter neighbours pair). The port opts out
+with `PortInfo::interpolation = false`.
+
 ## Tools
 
 - `dreamcomp_ta_match A.ta B.ta [--window N]` — pairing coverage and displacement.

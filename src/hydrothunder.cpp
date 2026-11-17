@@ -44,6 +44,9 @@ const dreamcomp::PortInfo kInfo = [] {
     // shared, so the default overlay_z stays out of the way.
     p.hud.enabled = true;
     p.hud.polygons = true;
+    // Blended frames show stray streaks and misplaced HUD icons in a race (spray particles and
+    // blinking HUD pieces reorder between frames, so strips pair with the wrong neighbour).
+    p.interpolation = false;
     return p;
 }();
 dreamcomp::RegisterPort g_register(kInfo);

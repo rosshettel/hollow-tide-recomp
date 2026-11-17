@@ -63,6 +63,11 @@ struct PortInfo {
     };
     HudRule hud;
 
+    // High-frame-rate geometry blending (docs/INTERPOLATION.md). False when the game's display
+    // lists do not pair cleanly between frames (blended frames show torn strips): the Frame rate
+    // setting is hidden and the game presents its own frames only.
+    bool interpolation = true;
+
     // The game's own control layout, in the bindings file format (dream/render/input.h): only the
     // controls it changes; the rest keep the engine defaults. Written once to the port's settings
     // folder as bindings.txt, which the launcher then uses instead of the shared file.

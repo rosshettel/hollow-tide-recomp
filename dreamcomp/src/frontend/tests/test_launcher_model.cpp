@@ -111,6 +111,24 @@ int main(int argc, char** argv) {
         CHECK(!c.found_sha1.empty() && c.found_sha1 != c.expected_sha1);
     }
 
+    // Steering: turning the wheel either way binds both halves; a pedal axis binds one control.
+    {
+        using dream::render::BindSource;
+        using dream::render::Binding;
+        using dream::render::PadControl;
+        dream::render::DeviceBindings d;
+        assign_binding(d, PadControl::StickLeft, 0, Binding{BindSource::JoyAxis, "wheel:0", 1});
+        CHECK((d[PadControl::StickLeft] == Binding{BindSource::JoyAxis, "wheel:0", -1}));
+        CHECK((d[PadControl::StickRight] == Binding{BindSource::JoyAxis, "wheel:0", 1}));
+        assign_binding(d, PadControl::StickLeft, 0, Binding{BindSource::JoyAxis, "wheel:0", -1});
+        CHECK(d[PadControl::StickLeft].sign == -1 && d[PadControl::StickRight].sign == 1);
+        assign_binding(d, PadControl::RightTrigger, 0, Binding{BindSource::JoyAxis, "pedals:1", 0});
+        CHECK(d[PadControl::RightTrigger].bound() && d[PadControl::StickRight].bound());
+        // Rebinding the wheel axis elsewhere takes it off Steering.
+        assign_binding(d, PadControl::A, 0, Binding{BindSource::JoyAxis, "wheel:0", 1});
+        CHECK(!d[PadControl::StickRight].bound() && d[PadControl::StickLeft].bound());
+    }
+
     std::filesystem::remove_all(dir);
     std::printf(g_fail ? "%d check(s) failed\n" : "all launcher model checks passed\n", g_fail);
     return g_fail ? 1 : 0;

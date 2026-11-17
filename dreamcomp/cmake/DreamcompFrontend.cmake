@@ -156,6 +156,7 @@ add_executable(dreamcomp_launcher_tests EXCLUDE_FROM_ALL
   ${DREAMCOMP_ROOT}/src/frontend/launcher_model.cpp
   ${DREAMCOMP_ROOT}/src/settings.cpp)
 target_include_directories(dreamcomp_launcher_tests PRIVATE
-  ${DREAMCOMP_ROOT}/include ${DREAMCOMP_ROOT}/src/frontend)
+  ${DREAMCOMP_ROOT}/include ${DREAMCOMP_ROOT}/src/frontend
+  ${DREAMCOMP_ROOT}/engine/render/include)  # input.h types only (header-inline), no render lib
 target_link_libraries(dreamcomp_launcher_tests PRIVATE dream::runtime)
 target_compile_features(dreamcomp_launcher_tests PRIVATE cxx_std_20)

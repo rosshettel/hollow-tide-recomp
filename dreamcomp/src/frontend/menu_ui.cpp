@@ -206,8 +206,8 @@ constexpr CtlRow kCtlRows[] = {
 
 // Wheel / pedals profile: Hydro Thunder names, not Dreamcast face-button letters.
 constexpr CtlRow kJoyCtlRows[] = {
-    {dream::render::PadControl::StickLeft, "Steering Left"},
-    {dream::render::PadControl::StickRight, "Steering Right"},
+    // One row binds both halves of the wheel axis (Stick Left gets -, Stick Right gets +).
+    {dream::render::PadControl::StickLeft, "Steering"},
     {dream::render::PadControl::RightTrigger, "Gas"},
     {dream::render::PadControl::LeftTrigger, "Brake"},
     {dream::render::PadControl::A, "Boost"},
@@ -677,17 +677,13 @@ std::string MenuUi::tab_general() {
                     "How strongly controllers with motors vibrate when the game asks for it. 0 % "
                     "turns rumble off.",
                     true);
-#if defined(_WIN32)
-    const char* fps_default = "60";
-#else
-    const char* fps_default = "auto";
-#endif
-    s += row_radio("fps", "Frame rate", {{"auto", "Auto"}, {"120", "120"}, {"60", "60"}},
-                   draft_.get("fps", fps_default),
-                   "<b>Auto</b> blends an in-between frame between the game's frames on displays "
-                   "of 120 Hz or more.<br/><b>120</b>: always blend.<br/><b>60</b>: only the "
-                   "game's own frames.<br/><br/>The game itself always runs at 60.",
-                   false);
+    if (cfg_.port && cfg_.port->interpolation)
+        s += row_radio("fps", "Frame rate", {{"auto", "Auto"}, {"120", "120"}, {"60", "60"}},
+                       draft_.get("fps", "auto"),
+                       "<b>Auto</b> blends an in-between frame between the game's frames on "
+                       "displays of 120 Hz or more.<br/><b>120</b>: always blend.<br/><b>60</b>: "
+                       "only the game's own frames.<br/><br/>The game itself always runs at 60.",
+                       false);
     s += row_radio("frame_timing", "Frame timing",
                    {{"display", "Match display"}, {"exact", "Exact 59.94 Hz"}},
                    draft_.get("frame_timing", "display") == "exact" ? "exact" : "display",
@@ -801,15 +797,15 @@ std::string MenuUi::controls_mappings() {
         kb ? "Click a box, or press Enter on it, then press the key to use. Escape cancels."
         : joy
             ? "Assign WHEEL / PEDALS / HANDBRAKE above first. Click a box, then turn the wheel or "
-              "press the pedal or button. Pedals bind as full-range axes; the wheel binds left and "
-              "right halves. Select or Escape cancels."
+              "press the pedal or button. Pedals bind as full-range axes; turning the wheel either "
+              "way binds its whole axis to Steering. Select or Escape cancels."
             : "Click a box, or press " + glyph(kGlyphA) +
                   " on it, then press the button or move the stick to use. Select or Escape "
                   "cancels.";
     const std::string who =
         kb ? "The keyboard plays as player 1, together with the first controller."
-        : joy ? "The joystick profile is always live with keyboard and controller. Steering "
-                "Left/Right, Gas, Brake, Boost (Boost's second box can be a handbrake)."
+        : joy ? "The joystick profile is always live with keyboard and controller. Steering, "
+                "Gas, Brake, Boost (Boost's second box can be a handbrake)."
               : "Every controller uses this profile; controller 1 plays as player 1, controller 2 "
                 "as player 2.";
     std::size_t nrow = 0;
@@ -834,7 +830,10 @@ std::string MenuUi::controls_mappings() {
                 inner = "<span class=\"brec\"></span>";
             else if (b.bound()) {
                 const std::string g = binding_glyph(b);
-                inner = g.empty() ? "<span class=\"btext\">" + esc(b.label()) + "</span>"
+                std::string label = b.label();
+                if (steering_axis(r.c, b))
+                    label = label.substr(0, label.size() - 2);  // "WHEEL:0", not its "-" half
+                inner = g.empty() ? "<span class=\"btext\">" + esc(label) + "</span>"
                                   : "<span class=\"bglyph\">" + g + "</span>";
             }
             s += "<div id=\"s-" + key + "-" + std::to_string(slot) + "\" class=\"cslot focusable" +
@@ -973,15 +972,7 @@ void MenuUi::finish_capture(const dream::render::Binding* b) {
         std::printf("controls: capture cancelled\n");
         return;
     }
-    auto& d = editing();
-    // One physical input → one control (same as the engine binding screen).
-    for (unsigned i = 0; i < dream::render::kPadControlCount; ++i) {
-        if (d.b[i] == *b)
-            d.b[i] = dream::render::Binding{};
-        if (d.alt[i] == *b)
-            d.alt[i] = dream::render::Binding{};
-    }
-    d.slot(static_cast<dream::render::PadControl>(control), slot) = *b;
+    assign_binding(editing(), static_cast<dream::render::PadControl>(control), slot, *b);
     const char* who = ctl_device_ == 0 ? "keyboard" : ctl_device_ == 2 ? "joystick" : "controller";
     std::printf("controls: %s %s slot %u = %s\n", who, ctl_label(control), slot + 1,
                 b->text().c_str());
@@ -1599,8 +1590,13 @@ void MenuUi::run_act(const std::string& act, Rml::Event* ev) {
         dirty_ = true;
     } else if (kind == "ctl-clear") {
         const auto c = static_cast<dream::render::PadControl>(std::atoi(arg.c_str()));
-        for (unsigned slot = 0; slot < dream::render::kBindingSlots; ++slot)
-            editing().slot(c, slot) = dream::render::Binding{};
+        auto& d = editing();
+        for (unsigned slot = 0; slot < dream::render::kBindingSlots; ++slot) {
+            // Clearing Steering also clears the + half it bound on Stick Right.
+            if (steering_axis(c, d.slot(c, slot)))
+                d.slot(dream::render::PadControl::StickRight, slot) = dream::render::Binding{};
+            d.slot(c, slot) = dream::render::Binding{};
+        }
         save_bindings();
         dirty_ = true;
     } else if (kind == "ctl-reset") {
