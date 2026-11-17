@@ -48,6 +48,7 @@ fi
 
 # Host glslc builds the SPIR-V headers; the cross link uses Windows Vulkan + SDL3.
 # Host dream-translate emits the C++; mingw only compiles/links it.
+# Frontend ON so a double-click opens the disc picker (no command line).
 cmake -S "$root" -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="$root/tools/cmake/mingw-w64-x86_64.cmake" \
@@ -56,23 +57,30 @@ cmake -S "$root" -B "$build" -G Ninja \
   -DVulkan_LIBRARY="$vk_root/lib/libvulkan-1.dll.a" \
   -DDREAM_TRANSLATE_EXECUTABLE="$host_translate" \
   -DDREAM_BUILD_TESTS=OFF \
-  -DDREAMCOMP_FRONTEND=OFF \
+  -DDREAMCOMP_FRONTEND=ON \
   -DDREAM_WERROR=OFF
 cmake --build "$build" --target hydrothunder_boot --parallel "$jobs"
 
 exe="$build/game/hydro-thunder.exe"
 [[ -f "$exe" ]] || { echo "no exe at $exe" >&2; exit 1; }
+[[ -d "$build/game/frontend" ]] || { echo "frontend assets missing beside the exe" >&2; exit 1; }
 
 rm -rf "$dist"
 mkdir -p "$dist"
 cp "$exe" "$dist/hydro-thunder.exe"
 cp "$sdl_root/bin/SDL3.dll" "$dist/"
-cp "$vk_root/bin/vulkan-1.dll" "$dist/"
-# Config the portable run uses; disc path is chosen at run time (--disc or the launcher).
+# Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
+# would shadow the GPU vendor's loader (what a 4070 Ti already has in System32).
 cp "$root/game/hydrothunder.toml" "$dist/"
-if [[ -d "$build/game/frontend" ]]; then
-  cp -R "$build/game/frontend" "$dist/frontend"
-fi
+cp -R "$build/game/frontend" "$dist/frontend"
+# Optional: unlock_all / widescreen toggles live in the launcher settings after first run.
+
+# Double-click this. cwd is forced to the bat's folder so hydrothunder.toml and frontend/ resolve.
+cat > "$dist/Play Hydro Thunder.bat" <<'EOF'
+@echo off
+cd /d "%~dp0"
+start "" "hydro-thunder.exe"
+EOF
 
 cat > "$dist/README.txt" <<'EOF'
 Hydro Thunder (Dreamcast) — portable Windows build
@@ -84,22 +92,36 @@ Copy this entire folder to a USB stick (or anywhere on the Windows PC).
 You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
 Do not redistribute the disc image.
 
-Requirements on the Windows PC
-------------------------------
+How to run (no command line)
+----------------------------
+Double-click "Play Hydro Thunder.bat" (or hydro-thunder.exe).
+
+First launch opens a launcher window:
+  1. Click the disc / browse control and pick your .chd (or .gdi / .cue)
+  2. Click Start Game
+
+The disc path is saved under %APPDATA%\dreamcomp\hydrothunder\settings.ini,
+so the next double-click can start without picking it again.
+
+Requirements
+------------
 - 64-bit Windows 10/11
-- A GPU with a working Vulkan driver (almost every recent NVIDIA / AMD / Intel
-  driver installs one). If the game says it cannot create a Vulkan device,
-  update the GPU driver from the vendor.
+- Vulkan from your GPU driver (see below)
 
-How to run
-----------
-1. Open a Command Prompt in this folder.
-2. Run (replace the path with your disc image):
+Vulkan — do I have it?
+----------------------
+An NVIDIA GeForce RTX 4070 Ti with stock Game Ready / Studio drivers already
+includes Vulkan. You do not need the Vulkan SDK.
 
-     hydro-thunder.exe --config hydrothunder.toml --disc "D:\Games\Hydro Thunder.chd" --window
+Quick checks on Windows:
+  1. File Explorer -> C:\Windows\System32\vulkan-1.dll  (should exist)
+  2. Or Win+R -> dxdiag -> Display tab: your 4070 Ti is listed
+  3. Optional: install "vulkaninfo" from the LunarG Vulkan SDK Runtime and run
+     `vulkaninfo --summary` — look for a GeForce RTX 4070 Ti device
 
-   Or double-click hydro-thunder.exe and pick the disc in the launcher when one
-   is present.
+This folder deliberately does NOT include vulkan-1.dll, so Windows uses the
+loader from your NVIDIA driver. If the game fails to open a Vulkan device,
+update the GeForce driver from nvidia.com and try again.
 
 Keyboard defaults (same as macOS)
 ---------------------------------
@@ -123,17 +145,10 @@ Steering wheel + pedals
 6. CLOSE — bindings save under %APPDATA%\dreamcomp\hydrothunder\bindings.txt
    so you only set this up once on that PC.
 
-Optional settings
------------------
-  --set unlock_all=true     unlock every track and boat
-  --widescreen              wide races (menus stay 4:3)
-  --no-launcher             skip the launcher window
-
-Vulkan
-------
-This build talks to the system Vulkan loader (vulkan-1.dll beside the exe is a
-fallback). Prefer the GPU vendor's driver; delete our vulkan-1.dll if it
-conflicts with a newer system loader.
+Optional (launcher Settings, or later)
+--------------------------------------
+  unlock_all     unlock every track and boat
+  widescreen     wide races (menus stay 4:3)
 EOF
 
 echo "staged: $dist"

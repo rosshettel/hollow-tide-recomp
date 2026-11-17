@@ -12,22 +12,22 @@ Produced on this Mac via mingw-w64 cross-compile (`tools/build_windows_mingw.sh`
 
 ```
 dist/windows/
-  hydro-thunder.exe
+  Play Hydro Thunder.bat   # double-click this
+  hydro-thunder.exe        # launcher built in (disc picker)
   SDL3.dll
-  vulkan-1.dll          # fallback loader; prefer the GPU vendor's Vulkan
   hydrothunder.toml
-  README.txt            # copy / run / wheel setup
+  frontend/                # launcher UI + fonts
+  README.txt
 ```
+
+No `vulkan-1.dll` in the folder — Windows uses the GPU vendor loader from System32
+(important for an RTX 4070 Ti with stock NVIDIA drivers).
 
 Copy the whole folder to a USB stick. Disc image is **not** included (rule 1).
+Double-click `Play Hydro Thunder.bat` → pick disc in the launcher → Start Game.
+Disc path persists in `%APPDATA%\dreamcomp\hydrothunder\settings.ini`.
 
-Primary dreamcomp Windows path remains clang-cl + VS 2022 Build Tools on a Windows host
-(`dreamcomp/docs/PLATFORMS.md`). The mingw script is the Mac fall-back that still yields a
-USB-ready layout. Rebuild:
-
-```sh
-./tools/build_windows_mingw.sh
-```
+Rebuild: `./tools/build_windows_mingw.sh`
 
 ## Keyboard defaults
 
