@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cross-compile Hydro Thunder for Windows x86_64 from macOS/Linux with mingw-w64, then stage a
+# Cross-compile Hollow Tide for Windows x86_64 from macOS/Linux with mingw-w64, then stage a
 # portable folder under dist/windows/ that copies onto a USB stick.
 #
 # Primary Windows path (dreamcomp): clang-cl + VS 2022 Build Tools on a Windows host
@@ -82,13 +82,13 @@ cmake -S "$root" -B "$build" -G Ninja \
   -DDREAM_WERROR=OFF
 cmake --build "$build" --target hydrothunder_boot --parallel "$jobs"
 
-exe="$build/game/hydro-thunder.exe"
+exe="$build/game/hollow-tide.exe"
 [[ -f "$exe" ]] || { echo "no exe at $exe" >&2; exit 1; }
 [[ -d "$build/game/frontend" ]] || { echo "frontend assets missing beside the exe" >&2; exit 1; }
 
 rm -rf "$dist"
 mkdir -p "$dist"
-cp "$exe" "$dist/hydro-thunder.exe"
+cp "$exe" "$dist/hollow-tide.exe"
 cp "$sdl_runtime_dll" "$dist/SDL3.dll"
 # MinGW runtimes (libgcc/libstdc++/winpthread) are statically linked — see toolchain.
 # Do NOT ship vulkan-1.dll next to the exe: Windows loads the app-dir copy first and that
@@ -109,7 +109,7 @@ if command -v file >/dev/null; then
 fi
 # Exe must not still depend on shared MinGW runtime DLLs (SAC blocks unsigned ones).
 if command -v x86_64-w64-mingw32-objdump >/dev/null; then
-  deps_dump="$(x86_64-w64-mingw32-objdump -p "$dist/hydro-thunder.exe")"
+  deps_dump="$(x86_64-w64-mingw32-objdump -p "$dist/hollow-tide.exe")"
   for dll in libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
     if grep -q "DLL Name: $dll" <<<"$deps_dump"; then
       echo "exe still imports $dll — static MinGW link failed" >&2
@@ -123,23 +123,23 @@ fi
 }
 
 # Double-click this. cwd is forced to the bat's folder so hydrothunder.toml and frontend/ resolve.
-cat > "$dist/Play Hydro Thunder.bat" <<'EOF'
+cat > "$dist/Play Hollow Tide.bat" <<'EOF'
 @echo off
 cd /d "%~dp0"
-start "" "hydro-thunder.exe"
+start "" "hollow-tide.exe"
 EOF
 
 cat > "$dist/README.txt" <<'EOF'
-Hydro Thunder (Dreamcast) — portable Windows build
+Hollow Tide — portable Windows build
 ==================================================
 
 What to copy
 ------------
-Delete any older Hydro Thunder folder on the USB first, then copy this entire
-folder (or unzip hydro-thunder-windows-x64.zip on the Windows PC).
-You need: hydro-thunder.exe, SDL3.dll, frontend/, hydrothunder.toml, and the .bat.
+Delete any older Hollow Tide folder on the USB first, then copy this entire
+folder (or unzip hollow-tide-windows-x64.zip on the Windows PC).
+You need: hollow-tide.exe, SDL3.dll, frontend/, hydrothunder.toml, and the .bat.
 (No lib*.dll — MinGW runtimes are linked into the exe.)
-You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
+You also need your own original disc image (.chd / .gdi / .cue).
 Do not redistribute the disc image.
 
 If Windows says a DLL is "not designed to run on Windows" with error 0xc0e90002,
@@ -148,7 +148,7 @@ avoids shipping those. Needs 64-bit Windows 10/11.
 
 How to run (no command line)
 ----------------------------
-Double-click "Play Hydro Thunder.bat" (or hydro-thunder.exe).
+Double-click "Play Hollow Tide.bat" (or hollow-tide.exe).
 
 First launch opens a launcher window:
   1. Click the disc / browse control and pick your .chd (or .gdi / .cue)
@@ -207,7 +207,7 @@ Optional (launcher Settings, or later)
 EOF
 
 # Zip without Mac resource forks — more reliable than Finder→USB for PE files.
-zip_path="$root/dist/hydro-thunder-windows-x64.zip"
+zip_path="$root/dist/hollow-tide-windows-x64.zip"
 mkdir -p "$root/dist"
 rm -f "$zip_path"
 (

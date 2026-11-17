@@ -3,21 +3,21 @@
 # Works on a Windows host after a native clang-cl build, or on any host given the build outputs.
 #
 # Usage: package_windows.sh <build-dir> [shortsha]
-# Env: HT_DIST_WIN (default dist/windows), HT_ZIP_PATH (default dist/hydro-thunder-windows-<sha>.zip)
+# Env: HT_DIST_WIN (default dist/windows), HT_ZIP_PATH (default dist/hollow-tide-windows-<sha>.zip)
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 build="${1:?build dir}"
 shortsha="${2:-unknown}"
 dist="${HT_DIST_WIN:-$root/dist/windows}"
-zip_path="${HT_ZIP_PATH:-$root/dist/hydro-thunder-windows-${shortsha}.zip}"
+zip_path="${HT_ZIP_PATH:-$root/dist/hollow-tide-windows-${shortsha}.zip}"
 
-exe="$build/game/hydro-thunder.exe"
+exe="$build/game/hollow-tide.exe"
 [[ -f "$exe" ]] || { echo "no exe at $exe" >&2; exit 1; }
 [[ -d "$build/game/frontend" ]] || { echo "frontend assets missing beside the exe" >&2; exit 1; }
 
 rm -rf "$dist"
 mkdir -p "$dist"
-cp "$exe" "$dist/hydro-thunder.exe"
+cp "$exe" "$dist/hollow-tide.exe"
 # Prefer the official win32-x64 runtime (USB pack / CI). Fall back to clang-cl POST_BUILD copy.
 if [[ -n "${HT_SDL3_DLL:-}" && -f "$HT_SDL3_DLL" ]]; then
   cp "$HT_SDL3_DLL" "$dist/SDL3.dll"
@@ -42,26 +42,28 @@ if command -v file >/dev/null; then
   }
 fi
 
-cat > "$dist/Play Hydro Thunder.bat" <<'EOF'
+cat > "$dist/Play Hollow Tide.bat" <<'EOF'
 @echo off
 cd /d "%~dp0"
-start "" "hydro-thunder.exe"
+start "" "hollow-tide.exe"
 EOF
 
 cat > "$dist/README.txt" <<'EOF'
-Hydro Thunder (Dreamcast) — portable Windows build
-==================================================
+Hollow Tide — portable Windows build
+====================================
+
+A Dreamcast recomp port. You need your own original disc image
+(.chd / .gdi / .cue). Do not redistribute the disc image.
 
 What to copy
 ------------
-Delete any older Hydro Thunder folder first, then unzip this archive on the
-Windows PC. You need: hydro-thunder.exe, SDL3.dll, frontend/, hydrothunder.toml,
-and the .bat. You also need your own Hydro Thunder disc image (.chd / .gdi / .cue).
-Do not redistribute the disc image.
+Delete any older Hollow Tide folder first, then unzip this archive on the
+Windows PC. You need: hollow-tide.exe, SDL3.dll, frontend/, hydrothunder.toml,
+and the .bat.
 
 How to run (no command line)
 ----------------------------
-Double-click "Play Hydro Thunder.bat" (or hydro-thunder.exe).
+Double-click "Play Hollow Tide.bat" (or hollow-tide.exe).
 
 First launch opens a launcher window:
   1. Click the disc / browse control and pick your .chd (or .gdi / .cue)

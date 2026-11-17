@@ -8,9 +8,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 build="${1:?build dir}"
 shortsha="${2:-unknown}"
 dist="${HT_DIST_MAC:-$root/dist/macos}"
-zip_path="${HT_ZIP_PATH:-$root/dist/hydro-thunder-macos-arm64-${shortsha}.zip}"
+zip_path="${HT_ZIP_PATH:-$root/dist/hollow-tide-macos-arm64-${shortsha}.zip}"
 
-bin="$build/game/hydro-thunder"
+bin="$build/game/hollow-tide"
 [[ -x "$bin" ]] || { echo "no binary at $bin" >&2; exit 1; }
 [[ -d "$build/game/frontend" ]] || { echo "frontend assets missing" >&2; exit 1; }
 
@@ -41,7 +41,7 @@ fi
 
 rm -rf "$dist"
 mkdir -p "$dist/lib" "$dist/vulkan/icd.d"
-cp "$bin" "$dist/hydro-thunder"
+cp "$bin" "$dist/hollow-tide"
 cp "$sdl" "$dist/lib/libSDL3.0.dylib"
 ln -sf libSDL3.0.dylib "$dist/lib/libSDL3.dylib"
 cp "$mvk" "$dist/lib/libMoltenVK.dylib"
@@ -65,13 +65,10 @@ cp "$root/LICENSE" "$dist/LICENSE.txt"
 
 # Point the binary at ./lib for SDL3; Vulkan ICD via the wrapper env.
 install_name_tool -change /opt/homebrew/opt/sdl3/lib/libSDL3.0.dylib @loader_path/lib/libSDL3.0.dylib \
-  "$dist/hydro-thunder" 2>/dev/null || true
+  "$dist/hollow-tide" 2>/dev/null || true
 install_name_tool -change /usr/local/opt/sdl3/lib/libSDL3.0.dylib @loader_path/lib/libSDL3.0.dylib \
-  "$dist/hydro-thunder" 2>/dev/null || true
-# Drop absolute vulkan-loader link if present; MoltenVK is loaded via ICD from the wrapper.
-if otool -L "$dist/hydro-thunder" | grep -q libvulkan; then
-  # Keep loader if we ship it; otherwise rely on MoltenVK ICD only through a tiny stub path.
-  # Prefer shipping the Homebrew vulkan loader next to the app when linked.
+  "$dist/hollow-tide" 2>/dev/null || true
+if otool -L "$dist/hollow-tide" | grep -q libvulkan; then
   vlib=""
   for c in /opt/homebrew/opt/vulkan-loader/lib/libvulkan.1.dylib \
            /usr/local/opt/vulkan-loader/lib/libvulkan.1.dylib; do
@@ -81,33 +78,35 @@ if otool -L "$dist/hydro-thunder" | grep -q libvulkan; then
     cp "$vlib" "$dist/lib/libvulkan.1.dylib"
     ln -sf libvulkan.1.dylib "$dist/lib/libvulkan.dylib"
     install_name_tool -change /opt/homebrew/opt/vulkan-loader/lib/libvulkan.1.dylib \
-      @loader_path/lib/libvulkan.1.dylib "$dist/hydro-thunder" 2>/dev/null || true
+      @loader_path/lib/libvulkan.1.dylib "$dist/hollow-tide" 2>/dev/null || true
     install_name_tool -change /usr/local/opt/vulkan-loader/lib/libvulkan.1.dylib \
-      @loader_path/lib/libvulkan.1.dylib "$dist/hydro-thunder" 2>/dev/null || true
+      @loader_path/lib/libvulkan.1.dylib "$dist/hollow-tide" 2>/dev/null || true
   fi
 fi
 
-cat > "$dist/Play Hydro Thunder.command" <<'EOF'
+cat > "$dist/Play Hollow Tide.command" <<'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 export VK_ICD_FILENAMES="$PWD/vulkan/icd.d/MoltenVK_icd.json"
 export DYLD_LIBRARY_PATH="$PWD/lib:${DYLD_LIBRARY_PATH:-}"
-exec ./hydro-thunder
+exec ./hollow-tide
 EOF
-chmod +x "$dist/Play Hydro Thunder.command" "$dist/hydro-thunder"
+chmod +x "$dist/Play Hollow Tide.command" "$dist/hollow-tide"
 
 cat > "$dist/README.txt" <<'EOF'
-Hydro Thunder (Dreamcast) — portable macOS (Apple Silicon) build
-================================================================
+Hollow Tide — portable macOS (Apple Silicon) build
+==================================================
 
-Unzip, then double-click "Play Hydro Thunder.command" (or run ./hydro-thunder
+A Dreamcast recomp port. You need your own original disc image
+(.chd / .gdi / .cue). Do not redistribute the disc image.
+
+Unzip, then double-click "Play Hollow Tide.command" (or run ./hollow-tide
 from Terminal after setting VK_ICD_FILENAMES as in that script).
 
-You need your own Hydro Thunder disc image (.chd / .gdi / .cue). The first
-launch opens a launcher: pick the disc, then Start Game. Disc path is saved
-under ~/Library/Application Support/dreamcomp/hydrothunder/.
+The first launch opens a launcher: pick the disc, then Start Game. Disc path
+is saved under ~/Library/Application Support/dreamcomp/hydrothunder/.
 
-Do not redistribute the disc image. This zip never includes game data.
+This zip never includes game data.
 
 Keyboard defaults match Windows (arrows / W Q / Space / Enter).
 EOF

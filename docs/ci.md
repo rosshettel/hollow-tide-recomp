@@ -1,7 +1,7 @@
 # CI packaging
 
-GitHub Actions builds portable Windows and macOS zips. Disc images and
-`1ST_READ.BIN` are never committed and never uploaded as release assets.
+GitHub Actions builds portable Windows and macOS zips for **Hollow Tide**.
+Disc images and `1ST_READ.BIN` are never committed and never uploaded as release assets.
 
 ## Triggers
 
@@ -14,10 +14,10 @@ Android is a disabled stub until M9.
 
 ## Artifact names
 
-- `hydro-thunder-windows-<shortsha>.zip`
-- `hydro-thunder-macos-arm64-<shortsha>.zip`
+- `hollow-tide-windows-<shortsha>.zip`
+- `hollow-tide-macos-arm64-<shortsha>.zip`
 
-Layout matches the USB pack Ross already tested (`dist/windows/`: exe, `SDL3.dll`,
+Layout matches the USB pack (`dist/windows/`: `hollow-tide.exe`, `SDL3.dll`,
 `frontend/`, `hydrothunder.toml`, launcher `.bat` / `.command`, README). No CHD,
 no `extracted/`, no generated `gen/`.
 
@@ -50,13 +50,12 @@ archive listing).
 
 ## Jobs
 
-- **windows-x64** (`windows-latest`): VS Build Tools + `clang-cl` + Ninja + Vulkan
-  SDK (`glslc`) + SDL 3.4.20. Same clang-cl style as dreamcomp’s primary Windows
-  path. Packages with `tools/package_windows.sh`.
+- **windows-x64** (`windows-latest`): VS Build Tools + `clang-cl` + Ninja + LunarG
+  Vulkan SDK (`glslc`, cached via `actions/cache@v4`) + SDL 3.4.20. Packages with
+  `tools/package_windows.sh`.
 - **macos-arm64** (`macos-latest`, Apple Silicon): Homebrew `sdl3`, `molten-vk`,
   `shaderc`, `vulkan-loader`. Packages with `tools/package_macos.sh` (ships dylibs +
-  MoltenVK ICD + `Play Hydro Thunder.command`). (`macos-14` remapped to an unsupported
-  label on this account.)
+  MoltenVK ICD + `Play Hollow Tide.command`).
 - **android**: `if: false` until M9.
 
 ## Local packaging (no Actions)
@@ -69,7 +68,7 @@ With a finished build and extracted boot file already present:
 ```
 
 The mingw cross path (`./tools/build_windows_mingw.sh`) still stages
-`dist/windows/` and `dist/hydro-thunder-windows-x64.zip` itself; CI uses the
+`dist/windows/` and `dist/hollow-tide-windows-x64.zip` itself; CI uses the
 native clang-cl job instead so runner packages match dreamcomp’s Windows toolchain.
 
 ## Workflow file
